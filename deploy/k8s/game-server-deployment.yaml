@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: engine-dedicated-server
+  namespace: game-servers
+  labels:
+    app: engine-dedicated-server
+    tier: backend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: engine-dedicated-server
+  template:
+    metadata:
+      labels:
+        app: engine-dedicated-server
+    spec:
+      containers:
+      - name: game-server
+        image: mygameengine/dedicated-server:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: game-udp
+          containerPort: 7777
+          protocol: UDP
+        - name: telemetry-tcp
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 10001
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: config-volume
+          mountPath: /home/gameuser/server/config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: engine-server-config

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: engine-server-config
+  namespace: game-servers
+  labels:
+    app.kubernetes.io/name: mygameengine-server
+    app.kubernetes.io/part-of: mygameengine
+data:
+  server.json: |
+    {
+      "serverName": "EU-Central-Dedicated-01",
+      "tickRateHz": 60,
+      "maxPlayers": 64,
+      "portUDP": 7777,
+      "telemetryPortTCP": 8080,
+      "enableRollbackReconciliation": true,
+      "rollbackBufferCapacity": 256,
+      "reconcileThresholdMeters": 0.02,
+      "worldExtentMeters": 4096.0
+    }

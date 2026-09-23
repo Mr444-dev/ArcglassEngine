@@ -1,0 +1,64 @@
+# Multi-stage production container for Dedicated Game Server & Headless Simulation
+# Build stage
+FROM ubuntu:24.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    clang-18 \
+    llvm-18 \
+    libc++-18-dev \
+    libc++abi-18-dev \
+    cmake \
+    ninja-build \
+    ca-certificates \
+    git \
+    libvulkan-dev \
+    vulkan-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CC=clang-18
+ENV CXX=clang++-18
+
+WORKDIR /app
+COPY . .
+
+RUN cmake -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DENABLE_LTO=ON \
+    -DBUILD_HEADLESS=ON \
+    -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+    -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
+
+RUN cmake --build build --config Release --target Engine_Tests
+
+# Production runtime stage
+FROM ubuntu:24.04 AS runner
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libvulkan1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Security: non-root user
+RUN groupadd -g 10001 gamegroup && \
+    useradd -u 10001 -g gamegroup -m -s /bin/bash gameuser
+
+WORKDIR /home/gameuser/server
+
+COPY --from=builder --chown=gameuser:gamegroup /app/build/bin/Engine_Tests ./Engine_Server
+COPY --from=builder --chown=gameuser:gamegroup /app/assets ./assets
+COPY --from=builder --chown=gameuser:gamegroup /app/shaders ./shaders
+
+USER gameuser
+
+# Game UDP port (Client-Server simulation) and Health HTTP port
+EXPOSE 7777/udp
+EXPOSE 8080/tcp
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD ./Engine_Server || exit 1
+
+ENTRYPOINT ["./Engine_Server"]

@@ -1,0 +1,35 @@
+replicaCount: 3
+
+image:
+  repository: mygameengine/dedicated-server
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+server:
+  name: "Production-Game-Server"
+  tickRateHz: 60
+  maxPlayers: 64
+  udpPort: 7777
+  telemetryPort: 8080
+  rollbackBufferCapacity: 256
+  reconcileThresholdMeters: 0.02
+  worldExtentMeters: 4096.0
+
+service:
+  type: LoadBalancer
+  udpPort: 7777
+  telemetryPort: 8080
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 1000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70

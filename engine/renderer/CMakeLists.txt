@@ -1,0 +1,55 @@
+add_library(Engine_Renderer STATIC
+    include/engine/renderer/Renderer.h
+    include/engine/renderer/Camera.h
+    include/engine/renderer/RenderGraphResource.h
+    include/engine/renderer/RenderGraph.h
+    include/engine/renderer/MaterialSystem.h
+    include/engine/renderer/DebugRenderer.h
+    include/engine/renderer/GPUDrivenPipeline.h
+    include/engine/renderer/HierarchicalDepthBuffer.h
+    include/engine/renderer/CascadedShadowMaps.h
+    include/engine/renderer/RenderDocCapture.h
+    include/engine/renderer/passes/DepthPrepass.h
+    include/engine/renderer/passes/LightingPass.h
+    include/engine/renderer/passes/PostProcessPass.h
+    include/engine/renderer/passes/VolumetricFogPass.h
+    include/engine/renderer/passes/TAAPass.h
+    include/engine/renderer/MeshletLODDAG.h
+    include/engine/renderer/VoxelGlobalIllumination.h
+    include/engine/renderer/NeuralRadianceCache.h
+    include/engine/renderer/WorldStreaming.h
+    include/engine/renderer/MeshShaderCulling.h
+    include/engine/renderer/AtmosphericSky.h
+    src/Renderer.cpp
+    src/Camera.cpp
+    src/RenderGraph.cpp
+    src/MaterialSystem.cpp
+    src/DebugRenderer.cpp
+    src/GPUDrivenPipeline.cpp
+    src/HierarchicalDepthBuffer.cpp
+    src/CascadedShadowMaps.cpp
+    src/RenderDocCapture.cpp
+    src/MeshletLODDAG.cpp
+    src/VoxelGlobalIllumination.cpp
+    src/NeuralRadianceCache.cpp
+    src/WorldStreaming.cpp
+    src/MeshShaderCulling.cpp
+    src/AtmosphericSky.cpp
+    src/passes/DepthPrepass.cpp
+    src/passes/LightingPass.cpp
+    src/passes/PostProcessPass.cpp
+    src/passes/VolumetricFogPass.cpp
+    src/passes/TAAPass.cpp
+)
+
+target_include_directories(Engine_Renderer 
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(Engine_Renderer PUBLIC Engine_Core Engine_Platform Engine_RHI)
+target_set_compiler_warnings(Engine_Renderer)

@@ -1,0 +1,37 @@
+name: CI Build & Test (C++20 DirectX 12)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.28.x'
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DBUILD_EDITOR=ON
+
+      - name: Build Engine & Editor
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Run Unit Tests
+        run: |
+          ctest --test-dir build -C Release --output-on-failure

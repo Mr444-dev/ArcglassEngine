@@ -1,0 +1,17 @@
+{
+  "name": "my-game-engine",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "sdl3",
+    "directx-headers",
+    "directxmath",
+    "d3d12-memory-allocator",
+    "entt",
+    "joltphysics",
+    "imgui",
+    "meshoptimizer",
+    "fastgltf",
+    "zstd",
+    "tracy"
+  ]
+}

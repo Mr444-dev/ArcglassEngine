@@ -1,0 +1,60 @@
+# ==============================================================================
+# Modern 3D Game Engine (Standard 2026) - Linux Headless & Vulkan 1.3 Container
+# ==============================================================================
+FROM ubuntu:24.04 AS build
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CXX=clang++-18
+ENV CC=clang-18
+
+# Install Clang 18, Ninja, CMake, Vulkan SDK dependencies, and Git
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang-18 \
+    clang-tools-18 \
+    lld-18 \
+    libc++-18-dev \
+    libc++abi-18-dev \
+    cmake \
+    ninja-build \
+    ca-certificates \
+    libvulkan-dev \
+    vulkan-tools \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# Copy engine codebase into container
+COPY . .
+
+# Configure and compile with Clang 18 and Link-Time Optimization
+RUN cmake -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CXX_COMPILER=clang++-18 \
+    -DCMAKE_C_COMPILER=clang-18 \
+    -DBUILD_EDITOR=OFF \
+    -DBUILD_TESTS=ON \
+    -DENABLE_LTO=ON
+
+RUN ninja -C build -j$(nproc)
+
+# Execute automated engine unit tests inside the container
+RUN ctest --test-dir build --output-on-failure
+
+# Production Headless Server Stage
+FROM ubuntu:24.04 AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libvulkan1 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/engine
+
+COPY --from=build /workspace/build/bin/GameRuntime /opt/engine/GameRuntime
+COPY --from=build /workspace/build/bin/Engine_Tests /opt/engine/Engine_Tests
+COPY --from=build /workspace/shaders /opt/engine/shaders
+
+EXPOSE 7777/udp
+
+ENTRYPOINT ["/opt/engine/GameRuntime", "--headless"]

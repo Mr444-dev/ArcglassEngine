@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: engine-server-service
+  namespace: game-servers
+  labels:
+    app: engine-dedicated-server
+spec:
+  type: LoadBalancer
+  selector:
+    app: engine-dedicated-server
+  ports:
+  - name: game-udp
+    port: 7777
+    targetPort: 7777
+    protocol: UDP
+  - name: telemetry-tcp
+    port: 8080
+    targetPort: 8080
+    protocol: TCP

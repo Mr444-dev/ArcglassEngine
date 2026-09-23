@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-service
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: game-udp
+      port: {{ .Values.service.udpPort }}
+      targetPort: game-udp
+      protocol: UDP
+    - name: telemetry-tcp
+      port: {{ .Values.service.telemetryPort }}
+      targetPort: telemetry-tcp
+      protocol: TCP
