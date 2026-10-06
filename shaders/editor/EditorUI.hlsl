@@ -21,11 +21,12 @@ cbuffer PushConstants : register(b0) {
     float4 Entity5;
     float4 Entity6;
     float4 Entity7;
-    // Two values per entity: world Y rotation and uniform scale.
-    float4 EntityTransform0;
-    float4 EntityTransform1;
-    float4 EntityTransform2;
-    float4 EntityTransform3;
+    // Rotation and scale preview values packed as two UNORM16 channels per entity.
+    uint4 PackedEntityTransform0;
+    uint4 PackedEntityTransform1;
+    // Three asset labels (two words each) followed by the current folder label.
+    float4 BrowserData0;
+    float4 BrowserData1;
     float2 MousePosition;
     float SelectedPositionX;
     float SelectedPositionY;
@@ -51,6 +52,9 @@ cbuffer PushConstants : register(b0) {
 #define Param11 ((float)(((uint)PackedState >> 16u) & 0x3u))
 #define Param12 ((float)(((uint)PackedState >> 18u) & 0x1u))
 #define EntityComponents (((uint)PackedState >> 19u) & 0x1Fu)
+#define AssetBrowserActive (((uint)PackedState >> 24u) & 0x1u)
+#define SelectedAssetItem (((uint)PackedState >> 25u) & 0x3u)
+#define AssetItemCount (((uint)PackedState >> 27u) & 0x3u)
 
 struct VSOutput {
     float4 position : SV_Position;
@@ -67,13 +71,25 @@ VSOutput VSMain(uint vertexID : SV_VertexID) {
 
 float FontCoverageAt(uint glyphIndex, int x, int y) {
     float coverage = 0.0f;
-    if (x >= 0 && x < 8 && y >= 0 && y < 12) {
-        uint pixelIndex = (uint)y * 8u + (uint)x;
-        uint packedCoverage = FontGlyphs[glyphIndex * 12u + pixelIndex / 8u];
+    if (x >= 0 && x < 12 && y >= 0 && y < 14) {
+        uint pixelIndex = (uint)y * 12u + (uint)x;
+        uint packedCoverage = FontGlyphs[glyphIndex * 21u + pixelIndex / 8u];
         uint shift = (pixelIndex & 7u) * 4u;
         coverage = float((packedCoverage >> shift) & 15u) / 15.0f;
     }
     return coverage;
+}
+
+uint FontGlyphIndex(uint character) {
+    uint codepoint = character & 127u;
+    return (codepoint >= 32u ? codepoint : (uint)'?') - 32u;
+}
+
+float FontAdvance(uint character) {
+    uint glyphIndex = FontGlyphIndex(character);
+    uint packedAdvances = FontAdvances[glyphIndex / 4u];
+    uint quarterPixels = (packedAdvances >> ((glyphIndex & 3u) * 8u)) & 255u;
+    return max(float(quarterPixels) * 0.25f, 1.0f);
 }
 
 float IsCharCoverage(float2 px, float2 pos, uint c, float scale) {
@@ -81,8 +97,8 @@ float IsCharCoverage(float2 px, float2 pos, uint c, float scale) {
     if (scale > 0.0f) {
         float glyphScale = max(scale, 1e-6f);
         float2 rel = (px - pos) / glyphScale;
-        if (rel.x >= 0.0f && rel.x < 8.0f && rel.y >= 0.0f && rel.y < 12.0f) {
-            uint glyphIndex = min(c & 127u, 127u);
+        if (rel.x >= 0.0f && rel.x < 12.0f && rel.y >= 0.0f && rel.y < 14.0f) {
+            uint glyphIndex = FontGlyphIndex(c);
             int2 sourcePixel = int2(rel);
             coverage = FontCoverageAt(glyphIndex, sourcePixel.x, sourcePixel.y);
         }
@@ -153,16 +169,59 @@ float TextCoverage(float2 px, float2 pos, uint length,
                    uint4 chars0, uint4 chars1, uint4 chars2, uint4 chars3, uint4 chars4,
                    float s = 1.0f) {
     float coverage = 0.0f;
+    float cursor = 0.0f;
     [loop]
     for (uint index = 0u; index < length; ++index) {
         uint glyph = 0u;
-        if (index < 4u) glyph = chars0[index];
-        else if (index < 8u) glyph = chars1[index - 4u];
-        else if (index < 12u) glyph = chars2[index - 8u];
-        else if (index < 16u) glyph = chars3[index - 12u];
-        else glyph = chars4[index - 16u];
-        float2 glyphPos = pos + float2((float)index * 8.0f * s, 0.0f);
+        uint slot = index & 3u;
+        if (index < 4u) glyph = slot == 0u ? chars0.x : slot == 1u ? chars0.y : slot == 2u ? chars0.z : chars0.w;
+        else if (index < 8u) glyph = slot == 0u ? chars1.x : slot == 1u ? chars1.y : slot == 2u ? chars1.z : chars1.w;
+        else if (index < 12u) glyph = slot == 0u ? chars2.x : slot == 1u ? chars2.y : slot == 2u ? chars2.z : chars2.w;
+        else if (index < 16u) glyph = slot == 0u ? chars3.x : slot == 1u ? chars3.y : slot == 2u ? chars3.z : chars3.w;
+        else glyph = slot == 0u ? chars4.x : slot == 1u ? chars4.y : slot == 2u ? chars4.z : chars4.w;
+        float2 glyphPos = pos + float2(cursor * s, 0.0f);
         coverage = max(coverage, IsCharCoverage(px, glyphPos, glyph, s));
+        cursor += FontAdvance(glyph);
+    }
+    return coverage;
+}
+
+uint BrowserWord(uint wordIndex) {
+    if (wordIndex == 0u) return asuint(BrowserData0.x);
+    if (wordIndex == 1u) return asuint(BrowserData0.y);
+    if (wordIndex == 2u) return asuint(BrowserData0.z);
+    if (wordIndex == 3u) return asuint(BrowserData0.w);
+    if (wordIndex == 4u) return asuint(BrowserData1.x);
+    if (wordIndex == 5u) return asuint(BrowserData1.y);
+    if (wordIndex == 6u) return asuint(BrowserData1.z);
+    if (wordIndex == 7u) return asuint(BrowserData1.w);
+    return 0u;
+}
+
+uint BrowserItemCharacter(uint itemIndex, uint characterIndex) {
+    uint packed = BrowserWord(itemIndex * 2u + characterIndex / 4u);
+    uint character = (packed >> ((characterIndex & 3u) * 8u)) & 255u;
+    return characterIndex == 0u ? character & 127u : character;
+}
+
+bool BrowserItemIsDirectory(uint itemIndex) {
+    return (BrowserWord(itemIndex * 2u) & 128u) != 0u;
+}
+
+uint BrowserFolderCharacter(uint characterIndex) {
+    uint packed = BrowserWord(6u + characterIndex / 4u);
+    return (packed >> ((characterIndex & 3u) * 8u)) & 255u;
+}
+
+float BrowserNameCoverage(float2 px, float2 pos, uint itemIndex, bool folderName) {
+    float coverage = 0.0f;
+    float cursor = 0.0f;
+    [unroll]
+    for (uint index = 0u; index < 8u; ++index) {
+        uint character = folderName ? BrowserFolderCharacter(index) : BrowserItemCharacter(itemIndex, index);
+        if (character == 0u || character == (uint)' ') break;
+        coverage = max(coverage, IsCharCoverage(px, pos + float2(cursor, 0.0f), character, 1.0f));
+        cursor += FontAdvance(character);
     }
     return coverage;
 }
@@ -254,14 +313,35 @@ bool RayBoxIntersect(float3 ro, float3 rd, float3 boxMin, float3 boxMax, inout f
 }
 
 float2 GetEntityTransform(int entityIndex) {
-    float4 packed = entityIndex < 2 ? EntityTransform0 :
-                    entityIndex < 4 ? EntityTransform1 :
-                    entityIndex < 6 ? EntityTransform2 : EntityTransform3;
-    return (entityIndex & 1) == 0 ? packed.xy : packed.zw;
+    uint packed = 0u;
+    if (entityIndex == 0) packed = PackedEntityTransform0.x;
+    else if (entityIndex == 1) packed = PackedEntityTransform0.y;
+    else if (entityIndex == 2) packed = PackedEntityTransform0.z;
+    else if (entityIndex == 3) packed = PackedEntityTransform0.w;
+    else if (entityIndex == 4) packed = PackedEntityTransform1.x;
+    else if (entityIndex == 5) packed = PackedEntityTransform1.y;
+    else if (entityIndex == 6) packed = PackedEntityTransform1.z;
+    else if (entityIndex == 7) packed = PackedEntityTransform1.w;
+    float rotation = float(packed & 0xFFFFu) * (6.28318530718f / 65535.0f);
+    float scale = max(float(packed >> 16u) * 0.01f, 0.05f);
+    return float2(rotation, scale);
 }
 
 float2 GetEntityTransform(float4 packedTransform, int entityIndex) {
     return (entityIndex & 1) == 0 ? packedTransform.xy : packedTransform.zw;
+}
+
+uint FixedNumberGlyph(uint index, uint whole, uint hundredths, bool negative, bool hasTens, uint integerDigits, uint signDigits) {
+    uint glyph = (uint)'0' + hundredths % 10u;
+    if (negative && index == 0u) glyph = (uint)'-';
+    else {
+        uint digitIndex = index - signDigits;
+        if (hasTens && digitIndex == 0u) glyph = (uint)'0' + (whole / 10u) % 10u;
+        else if (digitIndex == integerDigits - 1u) glyph = (uint)'0' + whole % 10u;
+        else if (digitIndex == integerDigits) glyph = (uint)'.';
+        else if (digitIndex == integerDigits + 1u) glyph = (uint)'0' + (hundredths / 10u) % 10u;
+    }
+    return glyph;
 }
 
 float DrawFixedNumberCoverage(float2 px, float2 center, float value) {
@@ -273,23 +353,22 @@ float DrawFixedNumberCoverage(float2 px, float2 center, float value) {
     uint integerDigits = hasTens ? 2u : 1u;
     uint signDigits = negative ? 1u : 0u;
     uint charCount = signDigits + integerDigits + 3u;
-    float2 start = center - float2((float)charCount * 4.5f, 6.0f);
-    float coverage = 0.0f;
-
+    float totalWidth = 0.0f;
     [unroll]
-    for (uint index = 0u; index < 6u; ++index) {
-        if (index >= charCount) continue;
-        uint glyph = 0u;
-        if (negative && index == 0u) glyph = (uint)'-';
-        else {
-            uint digitIndex = index - signDigits;
-            if (hasTens && digitIndex == 0u) glyph = (uint)'0' + (whole / 10u) % 10u;
-            else if (digitIndex == integerDigits - 1u) glyph = (uint)'0' + whole % 10u;
-            else if (digitIndex == integerDigits) glyph = (uint)'.';
-            else if (digitIndex == integerDigits + 1u) glyph = (uint)'0' + (hundredths / 10u) % 10u;
-            else glyph = (uint)'0' + hundredths % 10u;
-        }
-        coverage = max(coverage, IsCharCoverage(px, start + float2((float)index * 9.0f, 0.0f), glyph, 1.0f));
+    for (uint measureIndex = 0u; measureIndex < 6u; ++measureIndex) {
+        if (measureIndex >= charCount) continue;
+        uint glyph = FixedNumberGlyph(measureIndex, whole, hundredths, negative, hasTens, integerDigits, signDigits);
+        totalWidth += FontAdvance(glyph);
+    }
+    float2 start = center - float2(totalWidth * 0.5f, 8.0f);
+    float coverage = 0.0f;
+    float cursor = 0.0f;
+    [unroll]
+    for (uint drawIndex = 0u; drawIndex < 6u; ++drawIndex) {
+        if (drawIndex >= charCount) continue;
+        uint glyph = FixedNumberGlyph(drawIndex, whole, hundredths, negative, hasTens, integerDigits, signDigits);
+        coverage = max(coverage, IsCharCoverage(px, start + float2(cursor, 0.0f), glyph, 1.0f));
+        cursor += FontAdvance(glyph);
     }
     return coverage;
 }
@@ -325,6 +404,32 @@ bool DrawCubeIcon(float2 px, float2 origin) {
     return IconLine(px, a, b) || IconLine(px, b, c) || IconLine(px, a, d) || IconLine(px, b, origin + float2(8, 9)) ||
            IconLine(px, c, f) || IconLine(px, d, e) || IconLine(px, e, f) || IconLine(px, origin + float2(8, 9), e) ||
            IconLine(px, a, origin + float2(8, 9)) || IconLine(px, c, origin + float2(8, 9));
+}
+
+bool DrawBrowserFolderIcon(float2 px, float2 origin) {
+    float2 p = px - origin;
+    bool folderBody = p.x >= 1.0f && p.x <= 27.0f && p.y >= 7.0f && p.y <= 21.0f;
+    bool folderTab = p.x >= 3.0f && p.x <= 13.0f && p.y >= 3.0f && p.y <= 9.0f;
+    bool folderEdge = (abs(p.y - 7.0f) <= 0.8f && p.x >= 1.0f && p.x <= 27.0f) ||
+                      (abs(p.y - 21.0f) <= 0.8f && p.x >= 1.0f && p.x <= 27.0f) ||
+                      (abs(p.x - 1.0f) <= 0.8f && p.y >= 7.0f && p.y <= 21.0f) ||
+                      (abs(p.x - 27.0f) <= 0.8f && p.y >= 7.0f && p.y <= 21.0f);
+    return folderBody || folderTab || folderEdge;
+}
+
+bool DrawBrowserFileIcon(float2 px, float2 origin) {
+    float2 topLeft = origin + float2(4.0f, 2.0f);
+    float2 topRight = origin + float2(17.0f, 2.0f);
+    float2 foldRight = origin + float2(22.0f, 7.0f);
+    float2 bottomRight = origin + float2(22.0f, 23.0f);
+    float2 bottomLeft = origin + float2(4.0f, 23.0f);
+    return IconLine(px, topLeft, topRight) || IconLine(px, topRight, foldRight) || IconLine(px, foldRight, bottomRight) ||
+           IconLine(px, bottomRight, bottomLeft) || IconLine(px, bottomLeft, topLeft) ||
+           IconLine(px, origin + float2(17.0f, 2.0f), origin + float2(17.0f, 7.0f)) ||
+           IconLine(px, origin + float2(17.0f, 7.0f), origin + float2(22.0f, 7.0f)) ||
+           IconLine(px, origin + float2(8.0f, 12.0f), origin + float2(18.0f, 12.0f)) ||
+           IconLine(px, origin + float2(8.0f, 16.0f), origin + float2(18.0f, 16.0f)) ||
+           IconLine(px, origin + float2(8.0f, 20.0f), origin + float2(15.0f, 20.0f));
 }
 
 bool DrawSphereIcon(float2 px, float2 origin) {
@@ -1017,6 +1122,107 @@ float4 PSMain(VSOutput input) : SV_Target {
         float3 panelCol = uiCanvas;
         int tab = int(Param5);
 
+        if (AssetBrowserActive != 0u) {
+            float dockTop = h - bottomDockH;
+            if (px.y < dockTop + 28.0f) {
+                panelCol = uiSurface;
+                if (px.x >= 15.0f && px.x <= 140.0f) panelCol = uiSurface;
+                else if (px.x >= 150.0f && px.x <= 260.0f) panelCol = uiSurface;
+                else if (px.x >= 270.0f && px.x <= 370.0f) panelCol = uiPanelHeader;
+                if (px.x >= 270.0f && px.x <= 370.0f && px.y >= dockTop + 26.0f) panelCol = uiAccentBright;
+                float createText = Str6Coverage(px, float2(25.0f, dockTop + 8.0f), 'C', 'r', 'e', 'a', 't', 'e', 1.0f);
+                float shortcutText = Str9Coverage(px, float2(160.0f, dockTop + 8.0f), 'S', 'h', 'o', 'r', 't', 'c', 'u', 't', 's', 1.0f);
+                float assetText = Str6Coverage(px, float2(282.0f, dockTop + 8.0f), 'A', 's', 's', 'e', 't', 's', 1.0f);
+                panelCol = lerp(panelCol, float3(0.62f, 0.68f, 0.76f), max(createText, shortcutText));
+                panelCol = lerp(panelCol, float3(1.0f, 1.0f, 1.0f), assetText);
+            } else if (px.x < 180.0f) {
+                panelCol = float3(0.075f, 0.088f, 0.106f);
+                if (px.x >= 178.0f) panelCol = uiBorder;
+                for (int shortcut = 0; shortcut < 6; ++shortcut) {
+                    float rowTop = dockTop + 36.0f + shortcut * 23.0f;
+                    float rowBottom = rowTop + 21.0f;
+                    bool rowHovered = IsHovered(px, float2(5.0f, rowTop), float2(174.0f, rowBottom));
+                    if (rowHovered) panelCol = uiHover;
+                    float2 iconOrigin = float2(14.0f, rowTop + 2.0f);
+                    if (DrawBrowserFolderIcon(px, iconOrigin)) panelCol = float3(0.37f, 0.70f, 0.91f);
+                    float label = 0.0f;
+                    if (shortcut == 0) label = Str6Coverage(px, float2(42.0f, rowTop + 7.0f), 'A', 's', 's', 'e', 't', 's', 1.0f);
+                    else if (shortcut == 1) label = Str9Coverage(px, float2(42.0f, rowTop + 7.0f), 'M', 'a', 't', 'e', 'r', 'i', 'a', 'l', 's', 1.0f);
+                    else if (shortcut == 2) label = Str6Coverage(px, float2(42.0f, rowTop + 7.0f), 'M', 'o', 'd', 'e', 'l', 's', 1.0f);
+                    else if (shortcut == 3) label = Str6Coverage(px, float2(42.0f, rowTop + 7.0f), 'S', 'c', 'e', 'n', 'e', 's', 1.0f);
+                    else if (shortcut == 4) label = Str8Coverage(px, float2(42.0f, rowTop + 7.0f), 'T', 'e', 'x', 't', 'u', 'r', 'e', 's', 1.0f);
+                    else label = Str7Coverage(px, float2(42.0f, rowTop + 7.0f), 'S', 'h', 'a', 'd', 'e', 'r', 's', 1.0f);
+                    panelCol = lerp(panelCol, float3(0.80f, 0.84f, 0.91f), label);
+                }
+            } else {
+                panelCol = float3(0.085f, 0.099f, 0.119f);
+                float buttonY = dockTop + 33.0f;
+                float2 backMin = float2(198.0f, buttonY);
+                float2 backMax = float2(250.0f, buttonY + 27.0f);
+                float2 refreshMin = float2(257.0f, buttonY);
+                float2 refreshMax = float2(320.0f, buttonY + 27.0f);
+                float2 addMin = float2(327.0f, buttonY);
+                float2 addMax = float2(416.0f, buttonY + 27.0f);
+                if (IsHovered(px, backMin, backMax)) panelCol = uiHover;
+                if (IsHovered(px, refreshMin, refreshMax)) panelCol = uiHover;
+                if (IsHovered(px, addMin, addMax)) panelCol = uiAccent;
+                if ((Str4Coverage(px, float2(213.0f, buttonY + 8.0f), 'B', 'a', 'c', 'k', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.91f, 0.94f, 0.99f), Str4Coverage(px, float2(213.0f, buttonY + 8.0f), 'B', 'a', 'c', 'k', 1.0f));
+                if ((Str7Coverage(px, float2(266.0f, buttonY + 8.0f), 'R', 'e', 'f', 'r', 'e', 's', 'h', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.91f, 0.94f, 0.99f), Str7Coverage(px, float2(266.0f, buttonY + 8.0f), 'R', 'e', 'f', 'r', 'e', 's', 'h', 1.0f));
+                if ((Str9Coverage(px, float2(342.0f, buttonY + 8.0f), 'A', 'd', 'd', ' ', 'F', 'i', 'l', 'e', 's', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(1.0f, 1.0f, 1.0f), Str9Coverage(px, float2(342.0f, buttonY + 8.0f), 'A', 'd', 'd', ' ', 'F', 'i', 'l', 'e', 's', 1.0f));
+                float2 previousMin = float2(w - 101.0f, buttonY);
+                float2 previousMax = float2(w - 65.0f, buttonY + 27.0f);
+                float2 nextMin = float2(w - 62.0f, buttonY);
+                float2 nextMax = float2(w - 20.0f, buttonY + 27.0f);
+                if (IsHovered(px, previousMin, previousMax) || IsHovered(px, nextMin, nextMax)) panelCol = uiHover;
+                if (IsCharCoverage(px, float2(w - 88.0f, buttonY + 7.0f), '<', 1.2f) > 0.0f || IsCharCoverage(px, float2(w - 46.0f, buttonY + 7.0f), '>', 1.2f) > 0.0f) panelCol = lerp(panelCol, float3(0.88f, 0.92f, 0.98f), 1.0f);
+                if ((Str9Coverage(px, float2(432.0f, buttonY + 8.0f), 'A', 's', 's', 'e', 't', 's', ' ', '/', ' ', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.52f, 0.60f, 0.70f), Str9Coverage(px, float2(432.0f, buttonY + 8.0f), 'A', 's', 's', 'e', 't', 's', ' ', '/', ' ', 1.0f));
+                panelCol = lerp(panelCol, float3(0.86f, 0.90f, 0.97f), BrowserNameCoverage(px, float2(486.0f, buttonY + 8.0f), 0u, true));
+
+                float cardTop = dockTop + 68.0f;
+                float cardWidth = min(320.0f, max(150.0f, (w - 220.0f) / 3.0f));
+                if (AssetItemCount == 0u) {
+                    float title = Str13Coverage(px, float2(224.0f, cardTop + 25.0f), 'N', 'o', ' ', 'A', 's', 's', 'e', 't', 's', ' ', 'Y', 'e', 't', 1.0f);
+                    float hint = Str13Coverage(px, float2(224.0f, cardTop + 49.0f), 'U', 's', 'e', ' ', 'A', 'd', 'd', ' ', 'F', 'i', 'l', 'e', 's', 1.0f);
+                    panelCol = lerp(panelCol, float3(0.88f, 0.91f, 0.96f), title);
+                    panelCol = lerp(panelCol, float3(0.55f, 0.62f, 0.72f), hint);
+                    if ((Str10Coverage(px, float2(224.0f, cardTop + 67.0f), 't', 'o', ' ', 'i', 'm', 'p', 'o', 'r', 't', '.', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.55f, 0.62f, 0.72f), Str10Coverage(px, float2(224.0f, cardTop + 67.0f), 't', 'o', ' ', 'i', 'm', 'p', 'o', 'r', 't', '.', 1.0f));
+                }
+                [unroll]
+                for (uint item = 0u; item < 3u; ++item) {
+                    if (item < AssetItemCount) {
+                        float cardX = 200.0f + float(item) * cardWidth;
+                        float2 cardMin = float2(cardX, cardTop);
+                        float2 cardMax = float2(cardX + cardWidth - 14.0f, cardTop + 86.0f);
+                        bool selected = SelectedAssetItem == item + 1u;
+                        bool hovered = IsHovered(px, cardMin, cardMax);
+                        if (px.x >= cardMin.x && px.x <= cardMax.x && px.y >= cardMin.y && px.y <= cardMax.y) {
+                            panelCol = selected ? uiSelected : (hovered ? uiHover : uiRaised);
+                            if (abs(px.x - cardMin.x) <= 1.0f || abs(px.x - cardMax.x) <= 1.0f || abs(px.y - cardMin.y) <= 1.0f || abs(px.y - cardMax.y) <= 1.0f) panelCol = selected ? uiAmber : uiBorder;
+                        }
+                        bool isDirectory = BrowserItemIsDirectory(item);
+                        float2 iconOrigin = float2(cardX + (cardWidth - 30.0f) * 0.5f, cardTop + 7.0f);
+                        bool icon = isDirectory ? DrawBrowserFolderIcon(px, iconOrigin) : DrawBrowserFileIcon(px, iconOrigin + float2(4.0f, 0.0f));
+                        if (icon) panelCol = isDirectory ? float3(0.36f, 0.72f, 0.94f) : float3(0.72f, 0.80f, 0.91f);
+                        float labelX = cardX + 12.0f;
+                        float labelY = cardTop + 55.0f;
+                        panelCol = lerp(panelCol, selected ? float3(1.0f, 0.84f, 0.50f) : float3(0.92f, 0.94f, 0.98f), BrowserNameCoverage(px, float2(labelX, labelY), item, false));
+                        float typeCoverage = isDirectory
+                            ? Str9Coverage(px, float2(labelX, cardTop + 71.0f), 'D', 'I', 'R', 'E', 'C', 'T', 'O', 'R', 'Y', 0.82f)
+                            : Str4Coverage(px, float2(labelX, cardTop + 71.0f), 'F', 'I', 'L', 'E', 0.82f);
+                        panelCol = lerp(panelCol, float3(0.55f, 0.63f, 0.74f), typeCoverage);
+                    }
+                }
+            }
+            if (px.y >= h - 22.0f) {
+                panelCol = float3(0.07f, 0.07f, 0.10f);
+                if (px.x >= 15.0f && px.x <= 23.0f && px.y >= h - 15.0f && px.y <= h - 7.0f) panelCol = float3(0.2f, 0.9f, 0.4f);
+                if ((Str5Coverage(px, float2(32.0f, h - 15.0f), 'D', '3', 'D', '1', '2', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.55f, 0.79f, 1.0f), Str5Coverage(px, float2(32.0f, h - 15.0f), 'D', '3', 'D', '1', '2', 1.0f));
+                if ((Str5Coverage(px, float2(100.0f, h - 15.0f), 'S', 'c', 'e', 'n', 'e', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.72f, 0.76f, 0.84f), Str5Coverage(px, float2(100.0f, h - 15.0f), 'S', 'c', 'e', 'n', 'e', 1.0f));
+                if (SceneDirty > 0.5f) {
+                    if ((Str5Coverage(px, float2(158.0f, h - 15.0f), 'D', 'i', 'r', 't', 'y', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(1.0f, 0.73f, 0.34f), Str5Coverage(px, float2(158.0f, h - 15.0f), 'D', 'i', 'r', 't', 'y', 1.0f));
+                } else if ((Str5Coverage(px, float2(158.0f, h - 15.0f), 'S', 'a', 'v', 'e', 'd', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.51f, 0.83f, 0.64f), Str5Coverage(px, float2(158.0f, h - 15.0f), 'S', 'a', 'v', 'e', 'd', 1.0f));
+            }
+        } else {
         if (px.y < h - bottomDockH + 28.0f) {
             panelCol = uiSurface;
             if (px.x >= 15.0f && px.x <= 150.0f) {
@@ -1084,6 +1290,7 @@ float4 PSMain(VSOutput input) : SV_Target {
                     if ((Str5Coverage(px, float2(158.0f, h - 15.0f), 'D', 'i', 'r', 't', 'y', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(1.0f, 0.73f, 0.34f), Str5Coverage(px, float2(158.0f, h - 15.0f), 'D', 'i', 'r', 't', 'y', 1.0f));
                 } else if ((Str5Coverage(px, float2(158.0f, h - 15.0f), 'S', 'a', 'v', 'e', 'd', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.51f, 0.83f, 0.64f), Str5Coverage(px, float2(158.0f, h - 15.0f), 'S', 'a', 'v', 'e', 'd', 1.0f));
             }
+        }
         }
 
         if (px.y <= h - bottomDockH + 1.0f) panelCol = uiBorder;

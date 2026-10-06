@@ -20,8 +20,9 @@ Checks run from the renamed `ArcglassEngine` checkout on 2026-10-06:
 - Windows SDK `fxc.exe` compiled both the editor and runtime shader-model 5.1 programs; the Win32 resource compiler embedded the generated Arcglass `.ico` in both executables.
 - CTest passed its one registered target (`Engine_UnitTests`).
 - The editor viewport now has an editable directional-sun vector, approximate scene-object shadows, a procedural height-field preview, a sun disc, and a procedural cloud layer. These effects are shader previews, not integrated production render passes.
-- `EngineEditor.exe` and `GameRuntime.exe` were launched from the fresh build on the local Direct3D 12 development machine. The icon resource is compiled into each executable; there are no runtime icon-file dependencies.
-- The test log identified an NVIDIA GeForce GTX 1660 SUPER with about 6 GB dedicated VRAM. Other adapters have not been tested.
+- The editor includes a filesystem-backed `Assets` panel with folder shortcuts, paging, refresh, and `Add Files` copy into the project asset tree. The UI and its shader compile; live interaction was not rechecked in this build.
+- The editor/runtime executables and their shader outputs were generated in the fresh build directory. The icons are embedded in the executables; there are no runtime icon-file dependencies.
+- Earlier local graphics checks used an NVIDIA GeForce GTX 1660 SUPER with about 6 GB dedicated VRAM. Other adapters have not been tested.
 
 The checkout does not track executables. Fresh binaries are generated under the ignored `build/arcglass-msvc-release/bin/` directory. Historical binaries at the repository root are stale local artifacts and must not be published. CI rebuilds from source; no binary release is claimed.
 ## Engineering Highlights
@@ -32,13 +33,13 @@ The checkout does not track executables. Fresh binaries are generated under the 
 - Core allocators, job system, logging, and profiling utilities.
 - Entity/component world, transform hierarchy, spatial BVH, asset virtual file system, and mesh/texture cooking.
 - CPU-side physics, animation, audio, render-graph, streaming, and renderer utilities with unit-level checks.
-- A small editor with a custom HLSL-rendered interface, embedded Inter bitmap font, generated Arcglass brand mark, selectable scene objects, transform controls, and scene files. Its ray-cast viewport previews a procedural sky/cloud layer, directional lighting, approximate shadows, and an analytic height field; see [rendering preview details](docs/RENDERING_PREVIEW.md).
+- A small editor with a custom HLSL-rendered interface, an embedded Inter bitmap atlas with proportional advances, generated Arcglass brand mark, selectable scene objects, transform controls, scene files, and a filesystem-backed asset browser. Its ray-cast viewport previews a procedural sky/cloud layer, directional lighting, approximate shadows, and an analytic height field; see [rendering preview details](docs/RENDERING_PREVIEW.md).
 - A standalone interactive runtime sample.
 
 ## Current limitations
 
 - This is a prototype; there is no claim of production readiness, stable public API, or production game.
-- The editor remains an early scene-editing prototype. Its interface is a custom full-screen HLSL canvas, not a mature docking UI; there is no project/workspace format, asset import workflow, material editor, or finished content pipeline. The terrain and lighting effects are viewport approximations rather than mesh-based RenderGraph features. Scene documents use the small `.arcscene` format; legacy `.mgescene` files remain loadable.
+- The editor remains an early scene-editing prototype. Its interface is a custom full-screen HLSL canvas, not a mature docking UI; there is no project/workspace format, format-specific asset importer, thumbnail preview, material editor, or finished content pipeline. The asset browser lists files and copies selected local files into `assets/`; it does not validate, cook, or convert their contents. The terrain and lighting effects are viewport approximations rather than mesh-based RenderGraph features. Scene documents use the small `.arcscene` format; legacy `.mgescene` files remain loadable.
 - The runtime is a graphics/input sample, not a complete game.
 - Several renderer features exist as isolated C++ modules, shaders, or CPU-side tests. The runtime does not demonstrate the GPU-driven meshlet/HZB, ray-tracing, neural-radiance-cache, volumetric, or virtual-texture pipeline end to end.
 - The DirectStorage manager is a CPU-only queue-lifecycle simulator. It does not read files, call DirectStorage, decompress GDeflate, write VRAM, or measure bandwidth. `shaders/compute/GDeflateDecompress.hlsl` is an unused experimental scaffold, not a working decoder.

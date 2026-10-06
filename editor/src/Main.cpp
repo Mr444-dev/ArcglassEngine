@@ -5,8 +5,10 @@
 #include "engine/platform/Input.h"
 #include "engine/rhi/RHI.h"
 #include "engine/rhi/RHIDevice.h"
+#include "engine/assets/VirtualFileSystem.h"
 
 #include <chrono>
+#include <bit>
 #include <format>
 #include <numbers>
 #include <vector>
@@ -16,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <thread>
@@ -37,6 +40,65 @@ using namespace Engine::Core;
 using namespace Engine::RHI;
 
 namespace {
+struct AssetBrowserItem {
+    std::filesystem::path path;
+    std::string displayName;
+    bool isDirectory = false;
+};
+
+std::filesystem::path FindProjectRoot(const std::filesystem::path& start) {
+    for (auto candidate = start; !candidate.empty(); candidate = candidate.parent_path()) {
+        if (std::filesystem::is_regular_file(candidate / "CMakeLists.txt") &&
+            std::filesystem::is_directory(candidate / "runtime")) {
+            return candidate;
+        }
+        if (candidate == candidate.parent_path()) break;
+    }
+    return {};
+}
+
+std::string MakeAssetDisplayName(const std::filesystem::path& path, size_t maxCharacters = 8) {
+    std::string ascii;
+#if defined(_WIN32)
+    const std::wstring source = path.filename().wstring();
+    ascii.reserve(source.size());
+    for (wchar_t character : source) {
+        ascii.push_back(character >= 32 && character <= 126 ? static_cast<char>(character) : '?');
+    }
+#else
+    const std::string source = path.filename().string();
+    ascii.reserve(source.size());
+    for (unsigned char character : source) {
+        ascii.push_back(character >= 32 && character <= 126 ? static_cast<char>(character) : '?');
+    }
+#endif
+    if (ascii.size() > maxCharacters) {
+        ascii.resize(maxCharacters > 1 ? maxCharacters - 1 : 0);
+        ascii.push_back('~');
+    }
+    return ascii;
+}
+
+u32 PackFourAssetCharacters(const std::string& text, size_t offset, bool directoryMarker = false) {
+    u32 packed = 0;
+    for (size_t index = 0; index < 4; ++index) {
+        const size_t sourceIndex = offset + index;
+        const u32 character = sourceIndex < text.size() ? static_cast<u8>(text[sourceIndex]) : static_cast<u32>(' ');
+        const u32 marker = directoryMarker && index == 0 ? 0x80u : 0u;
+        packed |= ((character & 0x7Fu) | marker) << static_cast<u32>(index * 8);
+    }
+    return packed;
+}
+
+float PackEntityPreviewTransform(float rotationRadians, float uniformScale) {
+    constexpr float tau = 2.0f * std::numbers::pi_v<float>;
+    float wrappedRotation = std::fmod(rotationRadians, tau);
+    if (wrappedRotation < 0.0f) wrappedRotation += tau;
+    const u32 rotation = static_cast<u32>(std::lround((wrappedRotation / tau) * 65535.0f)) & 0xFFFFu;
+    const u32 scale = static_cast<u32>(std::lround(std::clamp(uniformScale, 0.05f, 655.35f) * 100.0f)) & 0xFFFFu;
+    return std::bit_cast<float>(rotation | (scale << 16u));
+}
+
 bool LoadShaderBytecode(const std::filesystem::path& path, std::vector<u8>& outBytecode) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
@@ -256,6 +318,26 @@ std::optional<std::filesystem::path> ChooseSceneFile(void* ownerHandle, bool sav
     return std::nullopt;
 }
 
+std::optional<std::filesystem::path> ChooseAssetFile(void* ownerHandle, const std::filesystem::path& initialDirectory) {
+#if defined(_WIN32)
+    wchar_t fileName[32768]{};
+    const std::wstring initialPath = initialDirectory.wstring();
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.hwndOwner = static_cast<HWND>(ownerHandle);
+    dialog.lpstrFilter = L"All Files (*.*)\0*.*\0\0";
+    dialog.lpstrFile = fileName;
+    dialog.nMaxFile = static_cast<DWORD>(std::size(fileName));
+    dialog.lpstrInitialDir = initialPath.c_str();
+    dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+    if (GetOpenFileNameW(&dialog)) return std::filesystem::path(fileName);
+#else
+    (void)ownerHandle;
+    (void)initialDirectory;
+#endif
+    return std::nullopt;
+}
+
 bool SaveSceneFile(const std::filesystem::path& path, const std::vector<EditorEntity>& entities) {
     if (entities.size() > 8) {
         ENGINE_LOG_ERROR("Cannot save scene: the editor currently supports at most 8 entities.");
@@ -450,6 +532,19 @@ int main(int argc, char* argv[]) {
     std::vector<u8> vsBytecode;
     std::vector<u8> psBytecode;
     const auto executableDirectory = std::filesystem::absolute(argv[0]).parent_path();
+    const auto discoveredProjectRoot = FindProjectRoot(executableDirectory);
+    const auto assetRoot = (discoveredProjectRoot.empty() ? executableDirectory : discoveredProjectRoot) / "assets";
+    try {
+        std::filesystem::create_directories(assetRoot);
+        for (const char* folder : {"Materials", "Models", "Scenes", "Shaders", "Textures"}) {
+            const auto directory = assetRoot / folder;
+            std::filesystem::create_directories(directory);
+            std::ofstream keep(directory / ".gitkeep", std::ios::app);
+            if (!keep) ENGINE_LOG_WARN("Could not create the asset folder marker in {}.", directory.string());
+        }
+    } catch (const std::filesystem::filesystem_error& error) {
+        ENGINE_LOG_ERROR("Could not initialize the project asset directory '{}': {}", assetRoot.string(), error.what());
+    }
     std::filesystem::path packageDirectory;
     const auto runtimeExecutable = executableDirectory / "GameRuntime.exe";
     const auto editorShaderDirectory = executableDirectory / "shaders" / "editor";
@@ -484,6 +579,7 @@ int main(int argc, char* argv[]) {
 
     Editor::EditorApp editor;
     editor.Initialize();
+    Assets::VirtualFileSystem::Get().Mount("assets", assetRoot.string());
 
     ENGINE_LOG_INFO("Arcglass Engine Editor ready. Fly: RMB+WASD. Focus: F. Orbit: Alt+LMB. Snap: 0.5m. Debug: F5.");
 
@@ -508,6 +604,7 @@ int main(int argc, char* argv[]) {
     // Interactive UI State
     int activeMenu = 0;       // 0=None, 1=File, 2=Edit, 3=Scene, 4=Build
     int bottomTab = 0;        // 0=Create, 1=Shortcuts
+    bool assetBrowserActive = true;
     int activeModal = 0;      // 0=None, 1=Settings, 2=BuildSuccess, 3=AddComponent
     int gizmoMode = 1;        // 0=Select, 1=Move(W), 2=Rotate(E), 3=Scale(R)
     bool debugDraw = false;   // F5 Debug drawing toggle
@@ -530,6 +627,99 @@ int main(int argc, char* argv[]) {
     std::vector<EditorEntity> dragUndoSnapshot;
     std::filesystem::path currentScenePath;
     bool sceneDirty = false;
+
+    std::filesystem::path currentAssetDirectory = assetRoot;
+    std::vector<AssetBrowserItem> assetItems;
+    int assetPage = 0;
+    int selectedAssetItem = -1;
+    auto refreshAssetItems = [&]() {
+        assetItems.clear();
+        std::error_code error;
+        std::filesystem::directory_iterator iterator(currentAssetDirectory,
+            std::filesystem::directory_options::skip_permission_denied, error);
+        const std::filesystem::directory_iterator end;
+        for (; !error && iterator != end; iterator.increment(error)) {
+            const auto entryPath = iterator->path();
+#if defined(_WIN32)
+            const std::wstring fileName = entryPath.filename().wstring();
+            if (fileName.empty() || fileName.front() == L'.' || fileName == L".gitkeep") continue;
+#else
+            const std::string fileName = entryPath.filename().string();
+            if (fileName.empty() || fileName.front() == '.' || fileName == ".gitkeep") continue;
+#endif
+
+            std::error_code statusError;
+            const auto status = iterator->symlink_status(statusError);
+            if (statusError || std::filesystem::is_symlink(status)) continue;
+            const bool isDirectory = std::filesystem::is_directory(status);
+            if (!isDirectory && !std::filesystem::is_regular_file(status)) continue;
+            assetItems.push_back({entryPath, MakeAssetDisplayName(entryPath), isDirectory});
+        }
+        if (error) {
+            ENGINE_LOG_WARN("Could not enumerate asset directory '{}': {}", currentAssetDirectory.string(), error.message());
+        }
+        std::sort(assetItems.begin(), assetItems.end(), [](const AssetBrowserItem& left, const AssetBrowserItem& right) {
+            if (left.isDirectory != right.isDirectory) return left.isDirectory;
+            return left.displayName < right.displayName;
+        });
+        const int pageCount = std::max(1, static_cast<int>((assetItems.size() + 2) / 3));
+        assetPage = std::clamp(assetPage, 0, pageCount - 1);
+        if (selectedAssetItem >= static_cast<int>(assetItems.size()) - assetPage * 3) selectedAssetItem = -1;
+    };
+    refreshAssetItems();
+    auto setAssetDirectory = [&](const std::filesystem::path& directory) {
+        std::error_code error;
+        const auto canonicalRoot = std::filesystem::weakly_canonical(assetRoot, error);
+        if (error) return;
+        const auto canonicalDirectory = std::filesystem::weakly_canonical(directory, error);
+        if (error) return;
+        const auto relative = canonicalDirectory.lexically_relative(canonicalRoot);
+        if (relative.empty() || relative == "." || (!relative.empty() && *relative.begin() != "..")) {
+            currentAssetDirectory = canonicalDirectory;
+            assetPage = 0;
+            selectedAssetItem = -1;
+            refreshAssetItems();
+        }
+    };
+    auto importAssetFile = [&]() {
+        const auto source = ChooseAssetFile(window.GetNativeHandle(), currentAssetDirectory);
+        if (!source) return;
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(*source, error) || error) {
+            ENGINE_LOG_WARN("Selected asset is not a readable regular file.");
+            return;
+        }
+        const auto sourcePath = std::filesystem::absolute(*source, error).lexically_normal();
+        if (error) return;
+        auto destination = currentAssetDirectory / source->filename();
+        if (std::filesystem::exists(destination, error) && !error) {
+            const auto stem = source->stem().wstring();
+            const auto extension = source->extension().wstring();
+            for (unsigned suffix = 2; suffix < 10000; ++suffix) {
+                destination = currentAssetDirectory / std::filesystem::path(std::format(L"{} ({}){}", stem, suffix, extension));
+                if (!std::filesystem::exists(destination, error) && !error) break;
+            }
+        }
+        const auto destinationPath = std::filesystem::absolute(destination, error).lexically_normal();
+        if (error || sourcePath == destinationPath) {
+            ENGINE_LOG_WARN("Skipped importing an asset onto itself.");
+            return;
+        }
+        if (!std::filesystem::copy_file(*source, destination, std::filesystem::copy_options::none, error) || error) {
+            ENGINE_LOG_ERROR("Could not import '{}' into '{}': {}", source->string(), currentAssetDirectory.string(), error.message());
+            return;
+        }
+        ENGINE_LOG_INFO("Imported asset '{}' into '{}'.", source->filename().string(), currentAssetDirectory.string());
+        refreshAssetItems();
+        const auto imported = std::find_if(assetItems.begin(), assetItems.end(), [&](const AssetBrowserItem& item) {
+            return item.path.filename() == destination.filename();
+        });
+        if (imported != assetItems.end()) {
+            const int index = static_cast<int>(std::distance(assetItems.begin(), imported));
+            assetPage = index / 3;
+            selectedAssetItem = index % 3;
+        }
+    };
 
     auto pushUndoSnapshot = [&]() {
         constexpr size_t maxHistory = 64;
@@ -1048,8 +1238,50 @@ int main(int argc, char* argv[]) {
                 else if (mouseY >= static_cast<float>(winDesc.height) - 200.0f) {
                     float bDockY = static_cast<float>(winDesc.height) - 200.0f;
                     if (mouseY <= bDockY + 28.0f) {
-                        if (mouseX >= 15.0f && mouseX <= 150.0f) bottomTab = 0;
-                        else if (mouseX >= 160.0f && mouseX <= 260.0f) bottomTab = 1;
+                        if (mouseX >= 15.0f && mouseX <= 140.0f) {
+                            bottomTab = 0;
+                            assetBrowserActive = false;
+                        } else if (mouseX >= 150.0f && mouseX <= 260.0f) {
+                            bottomTab = 1;
+                            assetBrowserActive = false;
+                        } else if (mouseX >= 270.0f && mouseX <= 370.0f) {
+                            assetBrowserActive = true;
+                            selectedAssetItem = -1;
+                            refreshAssetItems();
+                        }
+                    } else if (assetBrowserActive) {
+                        if (mouseY >= bDockY + 32.0f && mouseY <= bDockY + 62.0f) {
+                            if (mouseX >= 200.0f && mouseX <= 250.0f) {
+                                if (currentAssetDirectory != assetRoot) setAssetDirectory(currentAssetDirectory.parent_path());
+                            } else if (mouseX >= 258.0f && mouseX <= 320.0f) {
+                                selectedAssetItem = -1;
+                                refreshAssetItems();
+                            } else if (mouseX >= 328.0f && mouseX <= 416.0f) {
+                                importAssetFile();
+                            } else if (mouseX >= static_cast<float>(winDesc.width) - 100.0f && mouseX <= static_cast<float>(winDesc.width) - 65.0f) {
+                                selectedAssetItem = -1;
+                                assetPage = std::max(0, assetPage - 1);
+                                refreshAssetItems();
+                            } else if (mouseX >= static_cast<float>(winDesc.width) - 62.0f && mouseX <= static_cast<float>(winDesc.width) - 20.0f) {
+                                selectedAssetItem = -1;
+                                ++assetPage;
+                                refreshAssetItems();
+                            }
+                        } else if (mouseX < 180.0f && mouseY >= bDockY + 38.0f && mouseY < bDockY + 178.0f) {
+                            const int shortcut = static_cast<int>((mouseY - (bDockY + 38.0f)) / 23.0f);
+                            static constexpr const char* assetFolders[] = {"", "Materials", "Models", "Scenes", "Textures", "Shaders"};
+                            if (shortcut >= 0 && shortcut < 6) {
+                                setAssetDirectory(assetFolders[shortcut][0] == '\0' ? assetRoot : assetRoot / assetFolders[shortcut]);
+                            }
+                        } else if (mouseY >= bDockY + 68.0f && mouseY <= bDockY + 154.0f && mouseX >= 200.0f) {
+                            const float cardWidth = std::min(320.0f, std::max(150.0f, (static_cast<float>(winDesc.width) - 220.0f) / 3.0f));
+                            const int localIndex = static_cast<int>((mouseX - 200.0f) / cardWidth);
+                            const int itemIndex = assetPage * 3 + localIndex;
+                            if (localIndex >= 0 && localIndex < 3 && itemIndex >= 0 && itemIndex < static_cast<int>(assetItems.size())) {
+                                if (assetItems[itemIndex].isDirectory) setAssetDirectory(assetItems[itemIndex].path);
+                                else selectedAssetItem = localIndex;
+                            }
+                        }
                     } else if (bottomTab == 0 && mouseY >= bDockY + 38.0f && mouseY <= bDockY + 138.0f) {
                         for (int primitive = 0; primitive < 5; ++primitive) {
                             const float cardMinX = 200.0f + static_cast<float>(primitive) * 115.0f;
@@ -1117,6 +1349,12 @@ int main(int argc, char* argv[]) {
             if (selectedEntity >= 0 && selectedEntity < static_cast<int>(sceneEntities.size())) {
                 packedState |= (sceneEntities[selectedEntity].componentMask & 0x1Fu) << 19u;
             }
+            const int firstVisibleAsset = assetPage * 3;
+            const u32 visibleAssetCount = firstVisibleAsset < static_cast<int>(assetItems.size())
+                ? static_cast<u32>(std::min(3, static_cast<int>(assetItems.size()) - firstVisibleAsset)) : 0u;
+            packedState |= (assetBrowserActive ? 1u : 0u) << 24u;
+            packedState |= (static_cast<u32>(selectedAssetItem + 1) & 0x3u) << 25u;
+            packedState |= (visibleAssetCount & 0x3u) << 27u;
             pushConstants[7] = static_cast<float>(packedState);
 
             for (size_t i = 0; i < 8 && i < sceneEntities.size(); ++i) {
@@ -1124,9 +1362,19 @@ int main(int argc, char* argv[]) {
                 pushConstants[8 + i * 4 + 1] = sceneEntities[i].posY;
                 pushConstants[8 + i * 4 + 2] = sceneEntities[i].posZ;
                 pushConstants[8 + i * 4 + 3] = static_cast<float>(sceneEntities[i].type);
-                pushConstants[40 + i * 2 + 0] = sceneEntities[i].rotY;
-                pushConstants[40 + i * 2 + 1] = sceneEntities[i].scaleX;
+                pushConstants[40 + i] = PackEntityPreviewTransform(sceneEntities[i].rotY, sceneEntities[i].scaleX);
             }
+            for (size_t i = 0; i < 3; ++i) {
+                const size_t itemIndex = static_cast<size_t>(firstVisibleAsset) + i;
+                if (itemIndex < assetItems.size()) {
+                    const auto& item = assetItems[itemIndex];
+                    pushConstants[48 + i * 2] = std::bit_cast<float>(PackFourAssetCharacters(item.displayName, 0, item.isDirectory));
+                    pushConstants[49 + i * 2] = std::bit_cast<float>(PackFourAssetCharacters(item.displayName, 4));
+                }
+            }
+            const std::string currentFolderLabel = currentAssetDirectory == assetRoot ? "Project" : MakeAssetDisplayName(currentAssetDirectory);
+            pushConstants[54] = std::bit_cast<float>(PackFourAssetCharacters(currentFolderLabel, 0));
+            pushConstants[55] = std::bit_cast<float>(PackFourAssetCharacters(currentFolderLabel, 4));
 
             pushConstants[56] = Platform::Input::Get().GetMouseX();
             pushConstants[57] = Platform::Input::Get().GetMouseY();
