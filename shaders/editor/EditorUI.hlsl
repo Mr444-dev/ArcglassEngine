@@ -65,58 +65,151 @@ VSOutput VSMain(uint vertexID : SV_VertexID) {
     return output;
 }
 
+float FontCoverageAt(uint glyphIndex, int x, int y) {
+    float coverage = 0.0f;
+    if (x >= 0 && x < 8 && y >= 0 && y < 12) {
+        uint pixelIndex = (uint)y * 8u + (uint)x;
+        uint packedCoverage = FontGlyphs[glyphIndex * 12u + pixelIndex / 8u];
+        uint shift = (pixelIndex & 7u) * 4u;
+        coverage = float((packedCoverage >> shift) & 15u) / 15.0f;
+    }
+    return coverage;
+}
+
+float IsCharCoverage(float2 px, float2 pos, uint c, float scale) {
+    float coverage = 0.0f;
+    if (scale > 0.0f) {
+        float glyphScale = max(scale, 1e-6f);
+        float2 rel = (px - pos) / glyphScale;
+        if (rel.x >= 0.0f && rel.x < 8.0f && rel.y >= 0.0f && rel.y < 12.0f) {
+            uint glyphIndex = min(c & 127u, 127u);
+            int2 sourcePixel = int2(rel);
+            coverage = FontCoverageAt(glyphIndex, sourcePixel.x, sourcePixel.y);
+        }
+    }
+    return coverage;
+}
+
 bool IsChar(float2 px, float2 pos, uint c, float scale) {
-    float2 rel = (px - pos) / max(scale, 1e-6f);
-    bool inBounds = scale > 0.0f && rel.x >= 0.0f && rel.x < 8.0f && rel.y >= 0.0f && rel.y < 12.0f;
-    float2 safeRel = clamp(rel, float2(0.0f, 0.0f), float2(7.999f, 11.999f));
-    uint x = 7u - uint(safeRel.x);
-    uint y = uint(safeRel.y);
-    uint glyphIndex = min(c & 127u, 127u);
-    uint glyph = FontGlyphs[glyphIndex * 3u + y / 4u];
-    uint bitIndex = (y & 3u) * 8u + x;
-    return inBounds && ((glyph >> bitIndex) & 1u) != 0u;
+    return IsCharCoverage(px, pos, c, scale) >= 0.5f;
 }
 
 bool Str3(float2 px, float2 pos, uint c0, uint c1, uint c2, float s = 1.0f) {
-    float w = 9.0f * s;
+    float w = 8.0f * s;
     return IsChar(px, pos, c0, s) || IsChar(px, pos + float2(w, 0), c1, s) || IsChar(px, pos + float2(2*w, 0), c2, s);
 }
 
 bool Str4(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, float s = 1.0f) {
-    float w = 9.0f * s;
+    float w = 8.0f * s;
     return IsChar(px, pos, c0, s) || IsChar(px, pos + float2(w, 0), c1, s) || IsChar(px, pos + float2(2*w, 0), c2, s) || IsChar(px, pos + float2(3*w, 0), c3, s);
 }
 
 bool Str5(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, float s = 1.0f) {
-    float w = 9.0f * s;
+    float w = 8.0f * s;
     return IsChar(px, pos, c0, s) || IsChar(px, pos + float2(w, 0), c1, s) || IsChar(px, pos + float2(2*w, 0), c2, s) || IsChar(px, pos + float2(3*w, 0), c3, s) || IsChar(px, pos + float2(4*w, 0), c4, s);
 }
 
 bool Str6(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, float s = 1.0f) {
-    float w = 9.0f * s;
+    float w = 8.0f * s;
     return Str3(px, pos, c0, c1, c2, s) || Str3(px, pos + float2(3*w, 0), c3, c4, c5, s);
 }
 
 bool Str7(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, float s = 1.0f) {
-    float w = 9.0f * s;
+    float w = 8.0f * s;
     return Str4(px, pos, c0, c1, c2, c3, s) || Str3(px, pos + float2(4*w, 0), c4, c5, c6, s);
 }
 
 bool Str8(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, float s = 1.0f) {
-    float w = 9.0f * s;
+    float w = 8.0f * s;
     return Str4(px, pos, c0, c1, c2, c3, s) || Str4(px, pos + float2(4*w, 0), c4, c5, c6, c7, s);
 }
 
 bool Str9(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, float s = 1.0f) {
-    float w = 9.0f * s;
+    float w = 8.0f * s;
     return Str5(px, pos, c0, c1, c2, c3, c4, s) || Str4(px, pos + float2(5*w, 0), c5, c6, c7, c8, s);
 }
 
 bool Str10(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, uint c9, float s = 1.0f) {
-    float w = 9.0f * s;
+    float w = 8.0f * s;
     return Str5(px, pos, c0, c1, c2, c3, c4, s) || Str5(px, pos + float2(5*w, 0), c5, c6, c7, c8, c9, s);
 }
 
+bool Str12(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, uint c9, uint c10, uint c11, float s = 1.0f) {
+    float w = 8.0f * s;
+    return Str6(px, pos, c0, c1, c2, c3, c4, c5, s) || Str6(px, pos + float2(6*w, 0), c6, c7, c8, c9, c10, c11, s);
+}
+
+bool Str13(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, uint c9, uint c10, uint c11, uint c12, float s = 1.0f) {
+    float w = 8.0f * s;
+    return Str10(px, pos, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, s) || Str3(px, pos + float2(10*w, 0), c10, c11, c12, s);
+}
+
+bool Str17(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, uint c9, uint c10, uint c11, uint c12, uint c13, uint c14, uint c15, uint c16, float s = 1.0f) {
+    float w = 8.0f * s;
+    return Str10(px, pos, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, s) || Str7(px, pos + float2(10*w, 0), c10, c11, c12, c13, c14, c15, c16, s);
+}
+
+float TextCoverage(float2 px, float2 pos, uint length,
+                   uint4 chars0, uint4 chars1, uint4 chars2, uint4 chars3, uint4 chars4,
+                   float s = 1.0f) {
+    float coverage = 0.0f;
+    [loop]
+    for (uint index = 0u; index < length; ++index) {
+        uint glyph = 0u;
+        if (index < 4u) glyph = chars0[index];
+        else if (index < 8u) glyph = chars1[index - 4u];
+        else if (index < 12u) glyph = chars2[index - 8u];
+        else if (index < 16u) glyph = chars3[index - 12u];
+        else glyph = chars4[index - 16u];
+        float2 glyphPos = pos + float2((float)index * 8.0f * s, 0.0f);
+        coverage = max(coverage, IsCharCoverage(px, glyphPos, glyph, s));
+    }
+    return coverage;
+}
+
+float Str3Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, float s = 1.0f) {
+    return TextCoverage(px, pos, 3u, uint4(c0, c1, c2, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str4Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, float s = 1.0f) {
+    return TextCoverage(px, pos, 4u, uint4(c0, c1, c2, c3), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str5Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, float s = 1.0f) {
+    return TextCoverage(px, pos, 5u, uint4(c0, c1, c2, c3), uint4(c4, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str6Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, float s = 1.0f) {
+    return TextCoverage(px, pos, 6u, uint4(c0, c1, c2, c3), uint4(c4, c5, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str7Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, float s = 1.0f) {
+    return TextCoverage(px, pos, 7u, uint4(c0, c1, c2, c3), uint4(c4, c5, c6, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str8Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, float s = 1.0f) {
+    return TextCoverage(px, pos, 8u, uint4(c0, c1, c2, c3), uint4(c4, c5, c6, c7), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str9Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, float s = 1.0f) {
+    return TextCoverage(px, pos, 9u, uint4(c0, c1, c2, c3), uint4(c4, c5, c6, c7), uint4(c8, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str10Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, uint c9, float s = 1.0f) {
+    return TextCoverage(px, pos, 10u, uint4(c0, c1, c2, c3), uint4(c4, c5, c6, c7), uint4(c8, c9, 0u, 0u), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str12Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, uint c9, uint c10, uint c11, float s = 1.0f) {
+    return TextCoverage(px, pos, 12u, uint4(c0, c1, c2, c3), uint4(c4, c5, c6, c7), uint4(c8, c9, c10, c11), uint4(0u, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str13Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, uint c9, uint c10, uint c11, uint c12, float s = 1.0f) {
+    return TextCoverage(px, pos, 13u, uint4(c0, c1, c2, c3), uint4(c4, c5, c6, c7), uint4(c8, c9, c10, c11), uint4(c12, 0u, 0u, 0u), uint4(0u, 0u, 0u, 0u), s);
+}
+
+float Str17Coverage(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, uint c8, uint c9, uint c10, uint c11, uint c12, uint c13, uint c14, uint c15, uint c16, float s = 1.0f) {
+    return TextCoverage(px, pos, 17u, uint4(c0, c1, c2, c3), uint4(c4, c5, c6, c7), uint4(c8, c9, c10, c11), uint4(c12, c13, c14, c15), uint4(c16, 0u, 0u, 0u), s);
+}
 // 3D Geometric Primitive Ray Intersection Routines
 
 bool RayBoxIntersect(float3 ro, float3 rd, float3 boxMin, float3 boxMax, inout float tNear, inout float3 normal) {
@@ -171,23 +264,40 @@ float2 GetEntityTransform(float4 packedTransform, int entityIndex) {
     return (entityIndex & 1) == 0 ? packedTransform.xy : packedTransform.zw;
 }
 
-bool DrawFixedNumber(float2 px, float2 pos, float value) {
+float DrawFixedNumberCoverage(float2 px, float2 center, float value) {
     float clampedValue = min(abs(value), 99.99f);
     uint hundredths = (uint)floor(clampedValue * 100.0f + 0.5f);
-    uint glyph = 0u;
-    bool hit = false;
+    uint whole = hundredths / 100u;
+    bool negative = value < -0.005f;
+    bool hasTens = whole >= 10u;
+    uint integerDigits = hasTens ? 2u : 1u;
+    uint signDigits = negative ? 1u : 0u;
+    uint charCount = signDigits + integerDigits + 3u;
+    float2 start = center - float2((float)charCount * 4.5f, 6.0f);
+    float coverage = 0.0f;
+
     [unroll]
     for (uint index = 0u; index < 6u; ++index) {
-        if (index == 0u) glyph = value < -0.005f ? (uint)'-' : (uint)'+';
-        else if (index == 1u) glyph = (uint)'0' + (hundredths / 1000u) % 10u;
-        else if (index == 2u) glyph = (uint)'0' + (hundredths / 100u) % 10u;
-        else if (index == 3u) glyph = (uint)'.';
-        else if (index == 4u) glyph = (uint)'0' + (hundredths / 10u) % 10u;
-        else glyph = (uint)'0' + hundredths % 10u;
-        hit = hit || IsChar(px, pos + float2((float)index * 9.0f, 0.0f), glyph, 1.0f);
+        if (index >= charCount) continue;
+        uint glyph = 0u;
+        if (negative && index == 0u) glyph = (uint)'-';
+        else {
+            uint digitIndex = index - signDigits;
+            if (hasTens && digitIndex == 0u) glyph = (uint)'0' + (whole / 10u) % 10u;
+            else if (digitIndex == integerDigits - 1u) glyph = (uint)'0' + whole % 10u;
+            else if (digitIndex == integerDigits) glyph = (uint)'.';
+            else if (digitIndex == integerDigits + 1u) glyph = (uint)'0' + (hundredths / 10u) % 10u;
+            else glyph = (uint)'0' + hundredths % 10u;
+        }
+        coverage = max(coverage, IsCharCoverage(px, start + float2((float)index * 9.0f, 0.0f), glyph, 1.0f));
     }
-    return hit;
+    return coverage;
 }
+
+bool DrawFixedNumber(float2 px, float2 center, float value) {
+    return DrawFixedNumberCoverage(px, center, value) >= 0.5f;
+}
+
 
 bool IsHovered(float2 px, float2 minimum, float2 maximum) {
     return MousePosition.x >= minimum.x && MousePosition.x <= maximum.x &&
@@ -403,7 +513,20 @@ float4 PSMain(VSOutput input) : SV_Target {
     const float rightDockW = 330.0f;  // Details / Inspector
     const float bottomDockH = 200.0f; // Content Browser & Output Log
 
-    float3 finalColor = float3(0.08f, 0.09f, 0.12f);
+    const float3 uiCanvas = float3(0.075f, 0.086f, 0.102f);
+    const float3 uiToolbar = float3(0.082f, 0.098f, 0.116f);
+    const float3 uiSurface = float3(0.092f, 0.108f, 0.128f);
+    const float3 uiRaised = float3(0.124f, 0.145f, 0.170f);
+    const float3 uiPanelHeader = float3(0.135f, 0.157f, 0.184f);
+    const float3 uiHover = float3(0.175f, 0.215f, 0.252f);
+    const float3 uiAccent = float3(0.105f, 0.455f, 0.550f);
+    const float3 uiAccentMuted = float3(0.105f, 0.285f, 0.345f);
+    const float3 uiAccentBright = float3(0.35f, 0.80f, 0.92f);
+    const float3 uiSelected = float3(0.205f, 0.166f, 0.105f);
+    const float3 uiAmber = float3(0.95f, 0.66f, 0.27f);
+    const float3 uiBorder = float3(0.205f, 0.235f, 0.275f);
+
+    float3 finalColor = uiCanvas;
 
     // =========================================================================
     // 1. CENTRAL 3D SCENE VIEWPORT (WASD FREE-FLY CAMERA & 3D GIZMO)
@@ -552,7 +675,7 @@ float4 PSMain(VSOutput input) : SV_Target {
             // Selected Entity Glowing Outline (Unreal Yellow)
             if (hitEntity == int(Param3)) {
                 float rim = 1.0f - max(dot(hitNormal, viewDir), 0.0f);
-                if (rim > 0.65f) objCol = float3(1.0f, 0.75f, 0.0f);
+                if (rim > 0.65f) objCol = uiAmber;
             }
 
             // Debug Drawing (F5): Wireframe collider bounds in bright green!
@@ -621,20 +744,20 @@ float4 PSMain(VSOutput input) : SV_Target {
             }
             if (DrawScaleIcon(px, vpMin + float2(96.0f, 4.0f))) sceneCol = float3(0.94f, 0.96f, 1.0f);
 
-            if (Str5(px, float2(vpMin.x + 135.0f, vpMin.y + 7.0f), 'S', 'C', 'E', 'N', 'E', 1.0f)) sceneCol = float3(0.65f, 0.7f, 0.85f);
-            if (Str4(px, float2(vpMin.x + 190.0f, vpMin.y + 7.0f), 'D', 'X', '1', '2', 1.0f)) sceneCol = float3(0.4f, 0.75f, 1.0f);
+            if ((Str5Coverage(px, float2(vpMin.x + 135.0f, vpMin.y + 7.0f), 'S', 'c', 'e', 'n', 'e', 1.0f)) > 0.0f) sceneCol = lerp(sceneCol, float3(0.65f, 0.7f, 0.85f), Str5Coverage(px, float2(vpMin.x + 135.0f, vpMin.y + 7.0f), 'S', 'c', 'e', 'n', 'e', 1.0f));
+            if ((Str4Coverage(px, float2(vpMin.x + 190.0f, vpMin.y + 7.0f), 'D', 'X', '1', '2', 1.0f)) > 0.0f) sceneCol = lerp(sceneCol, float3(0.4f, 0.75f, 1.0f), Str4Coverage(px, float2(vpMin.x + 190.0f, vpMin.y + 7.0f), 'D', 'X', '1', '2', 1.0f));
 
             // Simulation state badge
             int simState = int(Param2);
             if (simState == 1) {
                 if (px.x >= vpMax.x - 90.0f && px.x <= vpMax.x - 10.0f && px.y >= vpMin.y + 4.0f && px.y <= vpMin.y + 22.0f) sceneCol = float3(0.18f, 0.65f, 0.35f);
-                if (Str7(px, float2(vpMax.x - 80.0f, vpMin.y + 7.0f), 'P', 'L', 'A', 'Y', 'I', 'N', 'G', 1.0f)) sceneCol = float3(1, 1, 1);
+                if ((Str7Coverage(px, float2(vpMax.x - 80.0f, vpMin.y + 7.0f), 'P', 'l', 'a', 'y', 'i', 'n', 'g', 1.0f)) > 0.0f) sceneCol = lerp(sceneCol, float3(1, 1, 1), Str7Coverage(px, float2(vpMax.x - 80.0f, vpMin.y + 7.0f), 'P', 'l', 'a', 'y', 'i', 'n', 'g', 1.0f));
             } else if (simState == 2) {
                 if (px.x >= vpMax.x - 85.0f && px.x <= vpMax.x - 10.0f && px.y >= vpMin.y + 4.0f && px.y <= vpMin.y + 22.0f) sceneCol = float3(0.70f, 0.55f, 0.15f);
-                if (Str6(px, float2(vpMax.x - 75.0f, vpMin.y + 7.0f), 'P', 'A', 'U', 'S', 'E', 'D', 1.0f)) sceneCol = float3(1, 1, 1);
+                if ((Str6Coverage(px, float2(vpMax.x - 75.0f, vpMin.y + 7.0f), 'P', 'a', 'u', 's', 'e', 'd', 1.0f)) > 0.0f) sceneCol = lerp(sceneCol, float3(1, 1, 1), Str6Coverage(px, float2(vpMax.x - 75.0f, vpMin.y + 7.0f), 'P', 'a', 'u', 's', 'e', 'd', 1.0f));
             } else {
                 if (px.x >= vpMax.x - 80.0f && px.x <= vpMax.x - 10.0f && px.y >= vpMin.y + 4.0f && px.y <= vpMin.y + 22.0f) sceneCol = float3(0.18f, 0.30f, 0.50f);
-                if (Str4(px, float2(vpMax.x - 65.0f, vpMin.y + 7.0f), 'E', 'D', 'I', 'T', 1.0f)) sceneCol = float3(1, 1, 1);
+                if ((Str4Coverage(px, float2(vpMax.x - 65.0f, vpMin.y + 7.0f), 'E', 'd', 'i', 't', 1.0f)) > 0.0f) sceneCol = lerp(sceneCol, float3(1, 1, 1), Str4Coverage(px, float2(vpMax.x - 65.0f, vpMin.y + 7.0f), 'E', 'd', 'i', 't', 1.0f));
             }
         }
 
@@ -648,7 +771,7 @@ float4 PSMain(VSOutput input) : SV_Target {
     // 2. ARCGLASS EDITOR TOOLBAR & SIMULATION CONTROLS
     // =========================================================================
     if (px.y < topBarH) {
-        float3 barCol = float3(0.10f, 0.11f, 0.15f);
+        float3 barCol = uiToolbar;
 
         // Menu Bar Row (Y: 0 to 32)
         if (px.y < 32.0f) {
@@ -665,15 +788,15 @@ float4 PSMain(VSOutput input) : SV_Target {
 
             // [▶ PLAY]
             if (px.x >= centerX - 120.0f && px.x <= centerX - 65.0f && px.y >= 5.0f && px.y <= 27.0f) {
-                barCol = (simState == 1) ? float3(0.24f, 0.78f, 0.40f) : float3(0.16f, 0.50f, 0.28f);
+                barCol = (simState == 1) ? uiAccent : uiAccentMuted;
             }
             // [⏸ PAUSE]
             else if (px.x >= centerX - 60.0f && px.x <= centerX - 10.0f && px.y >= 5.0f && px.y <= 27.0f) {
-                barCol = (simState == 2) ? float3(0.75f, 0.55f, 0.18f) : float3(0.18f, 0.20f, 0.28f);
+                barCol = (simState == 2) ? uiAmber * 0.70f : uiRaised;
             }
             // [⏭ STEP]
             else if (px.x >= centerX - 5.0f && px.x <= centerX + 45.0f && px.y >= 5.0f && px.y <= 27.0f) {
-                barCol = float3(0.20f, 0.35f, 0.55f);
+                barCol = uiAccentMuted;
             }
             // [⏹ STOP]
             else if (px.x >= centerX + 50.0f && px.x <= centerX + 100.0f && px.y >= 5.0f && px.y <= 27.0f) {
@@ -681,11 +804,11 @@ float4 PSMain(VSOutput input) : SV_Target {
             }
 
             if (ArcglassMark(px, float2(8.0f, 7.0f))) barCol = float3(0.42f, 0.78f, 0.98f);
-            if (Str8(px, float2(29.0f, 7.0f), 'A', 'R', 'C', 'G', 'L', 'A', 'S', 'S', 0.78f)) barCol = float3(0.70f, 0.87f, 1.0f);
-            if (Str4(px, float2(90.0f, 8.0f), 'F', 'I', 'L', 'E', 1.0f)) barCol = float3(0.95f, 0.95f, 1.0f);
-            if (Str4(px, float2(140.0f, 8.0f), 'E', 'D', 'I', 'T', 1.0f)) barCol = float3(0.95f, 0.95f, 1.0f);
-            if (Str5(px, float2(190.0f, 8.0f), 'S', 'C', 'E', 'N', 'E', 1.0f)) barCol = float3(0.95f, 0.95f, 1.0f);
-            if (Str5(px, float2(250.0f, 8.0f), 'B', 'U', 'I', 'L', 'D', 1.0f)) barCol = float3(0.95f, 0.95f, 1.0f);
+            if ((Str8Coverage(px, float2(29.0f, 7.0f), 'A', 'r', 'c', 'g', 'l', 'a', 's', 's', 0.78f)) > 0.0f) barCol = lerp(barCol, float3(0.70f, 0.87f, 1.0f), Str8Coverage(px, float2(29.0f, 7.0f), 'A', 'r', 'c', 'g', 'l', 'a', 's', 's', 0.78f));
+            if ((Str4Coverage(px, float2(90.0f, 8.0f), 'F', 'i', 'l', 'e', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.95f, 0.95f, 1.0f), Str4Coverage(px, float2(90.0f, 8.0f), 'F', 'i', 'l', 'e', 1.0f));
+            if ((Str4Coverage(px, float2(140.0f, 8.0f), 'E', 'd', 'i', 't', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.95f, 0.95f, 1.0f), Str4Coverage(px, float2(140.0f, 8.0f), 'E', 'd', 'i', 't', 1.0f));
+            if ((Str5Coverage(px, float2(190.0f, 8.0f), 'S', 'c', 'e', 'n', 'e', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.95f, 0.95f, 1.0f), Str5Coverage(px, float2(190.0f, 8.0f), 'S', 'c', 'e', 'n', 'e', 1.0f));
+            if ((Str5Coverage(px, float2(250.0f, 8.0f), 'B', 'u', 'i', 'l', 'd', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.95f, 0.95f, 1.0f), Str5Coverage(px, float2(250.0f, 8.0f), 'B', 'u', 'i', 'l', 'd', 1.0f));
 
             if (DrawPlayIcon(px, float2(centerX - 103.0f, 8.0f))) barCol = float3(0.94f, 1.0f, 0.96f);
             if (IconLine(px, float2(centerX - 42.0f, 9.0f), float2(centerX - 42.0f, 23.0f), 1.5f) ||
@@ -695,46 +818,46 @@ float4 PSMain(VSOutput input) : SV_Target {
             if (px.x >= centerX + 66.0f && px.x <= centerX + 80.0f && px.y >= 9.0f && px.y <= 23.0f) barCol = float3(1.0f, 0.84f, 0.84f);
 
             // [PACKAGE / BUILD GAME] Toolbar Button
-            if (px.x >= w - 150.0f && px.x <= w - 15.0f && px.y >= 5.0f && px.y <= 27.0f) barCol = float3(0.18f, 0.45f, 0.75f);
-            if (Str10(px, float2(w - 142.0f, 8.0f), 'B', 'U', 'I', 'L', 'D', ' ', 'G', 'A', 'M', 'E', 1.0f)) barCol = float3(1, 1, 1);
+            if (px.x >= w - 150.0f && px.x <= w - 15.0f && px.y >= 5.0f && px.y <= 27.0f) barCol = IsHovered(px, float2(w - 150.0f, 5.0f), float2(w - 15.0f, 27.0f)) ? uiAccentBright : uiAccent;
+            if ((Str10Coverage(px, float2(w - 142.0f, 8.0f), 'B', 'u', 'i', 'l', 'd', ' ', 'G', 'a', 'm', 'e', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(1, 1, 1), Str10Coverage(px, float2(w - 142.0f, 8.0f), 'B', 'u', 'i', 'l', 'd', ' ', 'G', 'a', 'm', 'e', 1.0f));
         }
         // Quick Object Creation Row (Y: 33 to 74)
         else {
-            barCol = float3(0.12f, 0.13f, 0.18f);
+            barCol = uiRaised;
 
-            if (IsHovered(px, float2(12.0f, 38.0f), float2(82.0f, 68.0f))) barCol = float3(0.22f, 0.28f, 0.42f);
+            if (IsHovered(px, float2(12.0f, 38.0f), float2(82.0f, 68.0f))) barCol = uiHover;
             if (DrawCubeIcon(px, float2(17.0f, 43.0f))) barCol = float3(0.93f, 0.59f, 0.39f);
-            if (Str4(px, float2(39.0f, 48.0f), 'C', 'U', 'B', 'E', 1.0f)) barCol = float3(0.94f, 0.95f, 1.0f);
+            if ((Str4Coverage(px, float2(39.0f, 48.0f), 'C', 'u', 'b', 'e', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.94f, 0.95f, 1.0f), Str4Coverage(px, float2(39.0f, 48.0f), 'C', 'u', 'b', 'e', 1.0f));
 
-            if (IsHovered(px, float2(88.0f, 38.0f), float2(170.0f, 68.0f))) barCol = float3(0.22f, 0.28f, 0.42f);
+            if (IsHovered(px, float2(88.0f, 38.0f), float2(170.0f, 68.0f))) barCol = uiHover;
             if (DrawSphereIcon(px, float2(94.0f, 43.0f))) barCol = float3(0.49f, 0.75f, 1.0f);
-            if (Str6(px, float2(116.0f, 48.0f), 'S', 'P', 'H', 'E', 'R', 'E', 1.0f)) barCol = float3(0.94f, 0.95f, 1.0f);
+            if ((Str6Coverage(px, float2(116.0f, 48.0f), 'S', 'p', 'h', 'e', 'r', 'e', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.94f, 0.95f, 1.0f), Str6Coverage(px, float2(116.0f, 48.0f), 'S', 'p', 'h', 'e', 'r', 'e', 1.0f));
 
-            if (IsHovered(px, float2(176.0f, 38.0f), float2(265.0f, 68.0f))) barCol = float3(0.22f, 0.28f, 0.42f);
+            if (IsHovered(px, float2(176.0f, 38.0f), float2(265.0f, 68.0f))) barCol = uiHover;
             if (DrawCylinderIcon(px, float2(183.0f, 43.0f))) barCol = float3(0.49f, 0.83f, 0.55f);
-            if (Str3(px, float2(205.0f, 48.0f), 'C', 'Y', 'L', 1.0f)) barCol = float3(0.94f, 0.95f, 1.0f);
+            if ((Str3Coverage(px, float2(205.0f, 48.0f), 'C', 'y', 'l', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.94f, 0.95f, 1.0f), Str3Coverage(px, float2(205.0f, 48.0f), 'C', 'y', 'l', 1.0f));
 
-            if (IsHovered(px, float2(271.0f, 38.0f), float2(348.0f, 68.0f))) barCol = float3(0.22f, 0.28f, 0.42f);
+            if (IsHovered(px, float2(271.0f, 38.0f), float2(348.0f, 68.0f))) barCol = uiHover;
             if (DrawPlaneIcon(px, float2(277.0f, 43.0f))) barCol = float3(0.81f, 0.84f, 0.90f);
-            if (Str5(px, float2(299.0f, 48.0f), 'P', 'L', 'A', 'N', 'E', 1.0f)) barCol = float3(0.94f, 0.95f, 1.0f);
+            if ((Str5Coverage(px, float2(299.0f, 48.0f), 'P', 'l', 'a', 'n', 'e', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.94f, 0.95f, 1.0f), Str5Coverage(px, float2(299.0f, 48.0f), 'P', 'l', 'a', 'n', 'e', 1.0f));
 
             if (IsHovered(px, float2(354.0f, 38.0f), float2(430.0f, 68.0f))) barCol = float3(0.28f, 0.26f, 0.16f);
             if (DrawLightIcon(px, float2(360.0f, 43.0f))) barCol = float3(1.0f, 0.86f, 0.35f);
-            if (Str5(px, float2(382.0f, 48.0f), 'L', 'I', 'G', 'H', 'T', 1.0f)) barCol = float3(1.0f, 0.93f, 0.59f);
+            if ((Str5Coverage(px, float2(382.0f, 48.0f), 'L', 'i', 'g', 'h', 't', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(1.0f, 0.93f, 0.59f), Str5Coverage(px, float2(382.0f, 48.0f), 'L', 'i', 'g', 'h', 't', 1.0f));
 
             // [DEBUG DRAW F5]
             if (IsHovered(px, float2(436.0f, 38.0f), float2(525.0f, 68.0f))) {
                 barCol = (Param12 > 0.5f) ? float3(0.18f, 0.55f, 0.30f) : float3(0.18f, 0.20f, 0.28f);
             }
-            if (Str8(px, float2(444.0f, 48.0f), 'D', 'E', 'B', 'U', 'G', ' ', 'F', '5', 1.0f)) barCol = float3(0.84f, 0.88f, 0.95f);
+            if ((Str8Coverage(px, float2(444.0f, 48.0f), 'D', 'e', 'b', 'u', 'g', ' ', 'F', '5', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(0.84f, 0.88f, 0.95f), Str8Coverage(px, float2(444.0f, 48.0f), 'D', 'e', 'b', 'u', 'g', ' ', 'F', '5', 1.0f));
 
             // [🗑 DELETE]
             if (IsHovered(px, float2(531.0f, 38.0f), float2(605.0f, 68.0f))) barCol = float3(0.38f, 0.16f, 0.18f);
             if (DrawTrashIcon(px, float2(539.0f, 43.0f))) barCol = float3(1.0f, 0.52f, 0.54f);
-            if (Str3(px, float2(561.0f, 48.0f), 'D', 'E', 'L', 1.0f)) barCol = float3(1.0f, 0.72f, 0.72f);
+            if ((Str3Coverage(px, float2(561.0f, 48.0f), 'D', 'e', 'l', 1.0f)) > 0.0f) barCol = lerp(barCol, float3(1.0f, 0.72f, 0.72f), Str3Coverage(px, float2(561.0f, 48.0f), 'D', 'e', 'l', 1.0f));
         }
 
-        if (px.y >= topBarH - 1.0f) barCol = float3(0.20f, 0.22f, 0.30f);
+        if (px.y >= topBarH - 1.0f) barCol = uiBorder;
         finalColor = barCol;
     }
 
@@ -742,12 +865,12 @@ float4 PSMain(VSOutput input) : SV_Target {
     // 3. LEFT DOCK: OUTLINER / SCENE HIERARCHY
     // =========================================================================
     if (px.x < leftDockW && px.y >= topBarH && px.y < h - bottomDockH) {
-        float3 panelCol = float3(0.09f, 0.10f, 0.13f);
+        float3 panelCol = uiSurface;
 
         if (px.y < topBarH + 32.0f) {
-            panelCol = float3(0.12f, 0.13f, 0.18f);
-            if (px.y >= topBarH + 31.0f) panelCol = float3(0.20f, 0.22f, 0.30f);
-            if (Str8(px, float2(15.0f, topBarH + 9.0f), 'O', 'U', 'T', 'L', 'I', 'N', 'E', 'R', 1.0f)) panelCol = float3(0.9f, 0.9f, 0.95f);
+            panelCol = uiRaised;
+            if (px.y >= topBarH + 31.0f) panelCol = uiBorder;
+            if ((Str8Coverage(px, float2(15.0f, topBarH + 9.0f), 'O', 'u', 't', 'l', 'i', 'n', 'e', 'r', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.9f, 0.9f, 0.95f), Str8Coverage(px, float2(15.0f, topBarH + 9.0f), 'O', 'u', 't', 'l', 'i', 'n', 'e', 'r', 1.0f));
         } else {
             float rowY = px.y - (topBarH + 34.0f);
             uint rowIndex = uint(max(rowY, 0.0f) / 30.0f);
@@ -757,10 +880,10 @@ float4 PSMain(VSOutput input) : SV_Target {
             uint count = min(uint(max(Param7, 0.0f)), 8u);
 
             if (rowIndex == selId && rowIndex < count) {
-                panelCol = float3(0.18f, 0.35f, 0.65f);
-                if (px.x <= 4.0f) panelCol = float3(1.0f, 0.75f, 0.0f); // Yellow accent
+                panelCol = uiSelected;
+                if (px.x <= 4.0f || inRowY <= 0.035f || inRowY >= 0.965f) panelCol = uiAmber;
             } else if ((rowIndex & 1u) == 1u && rowIndex < count) {
-                panelCol = float3(0.10f, 0.11f, 0.15f);
+                panelCol = uiToolbar;
             }
 
             if (rowIndex < count) {
@@ -782,15 +905,15 @@ float4 PSMain(VSOutput input) : SV_Target {
                 }
 
                 float itemY = topBarH + 42.0f + float(rowIndex) * 30.0f;
-                if (type == 0 && Str4(px, float2(36.0f, itemY), 'C', 'U', 'B', 'E', 1.0f)) panelCol = float3(1, 1, 1);
-                else if (type == 1 && Str6(px, float2(36.0f, itemY), 'S', 'P', 'H', 'E', 'R', 'E', 1.0f)) panelCol = float3(1, 1, 1);
-                else if (type == 2 && Str8(px, float2(36.0f, itemY), 'C', 'Y', 'L', 'I', 'N', 'D', 'E', 'R', 1.0f)) panelCol = float3(1, 1, 1);
-                else if (type == 3 && Str5(px, float2(36.0f, itemY), 'P', 'L', 'A', 'N', 'E', 1.0f)) panelCol = float3(1, 1, 1);
-                else if (type == 4 && Str5(px, float2(36.0f, itemY), 'L', 'I', 'G', 'H', 'T', 1.0f)) panelCol = float3(1, 1, 1);
+                if ((min(((type == 0) ? 1.0f : 0.0f), Str4Coverage(px, float2(36.0f, itemY), 'C', 'u', 'b', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((type == 0) ? 1.0f : 0.0f), Str4Coverage(px, float2(36.0f, itemY), 'C', 'u', 'b', 'e', 1.0f)));
+                else if ((min(((type == 1) ? 1.0f : 0.0f), Str6Coverage(px, float2(36.0f, itemY), 'S', 'p', 'h', 'e', 'r', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((type == 1) ? 1.0f : 0.0f), Str6Coverage(px, float2(36.0f, itemY), 'S', 'p', 'h', 'e', 'r', 'e', 1.0f)));
+                else if ((min(((type == 2) ? 1.0f : 0.0f), Str8Coverage(px, float2(36.0f, itemY), 'C', 'y', 'l', 'i', 'n', 'd', 'e', 'r', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((type == 2) ? 1.0f : 0.0f), Str8Coverage(px, float2(36.0f, itemY), 'C', 'y', 'l', 'i', 'n', 'd', 'e', 'r', 1.0f)));
+                else if ((min(((type == 3) ? 1.0f : 0.0f), Str5Coverage(px, float2(36.0f, itemY), 'P', 'l', 'a', 'n', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((type == 3) ? 1.0f : 0.0f), Str5Coverage(px, float2(36.0f, itemY), 'P', 'l', 'a', 'n', 'e', 1.0f)));
+                else if ((min(((type == 4) ? 1.0f : 0.0f), Str5Coverage(px, float2(36.0f, itemY), 'L', 'i', 'g', 'h', 't', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((type == 4) ? 1.0f : 0.0f), Str5Coverage(px, float2(36.0f, itemY), 'L', 'i', 'g', 'h', 't', 1.0f)));
             }
         }
 
-        if (px.x >= leftDockW - 1.0f) panelCol = float3(0.20f, 0.22f, 0.30f);
+        if (px.x >= leftDockW - 1.0f) panelCol = uiBorder;
         finalColor = panelCol;
     }
 
@@ -798,92 +921,92 @@ float4 PSMain(VSOutput input) : SV_Target {
     // 4. RIGHT DOCK: DETAILS / INSPECTOR WITH '+ ADD COMPONENT'
     // =========================================================================
     if (px.x > w - rightDockW && px.y >= topBarH && px.y < h - bottomDockH) {
-        float3 panelCol = float3(0.09f, 0.10f, 0.13f);
+        float3 panelCol = uiSurface;
         int selId = int(Param3);
 
         if (px.y < topBarH + 32.0f) {
-            panelCol = float3(0.12f, 0.13f, 0.18f);
-            if (px.y >= topBarH + 31.0f) panelCol = float3(0.20f, 0.22f, 0.30f);
-            if (Str7(px, float2(w - rightDockW + 15.0f, topBarH + 9.0f), 'D', 'E', 'T', 'A', 'I', 'L', 'S', 1.0f)) panelCol = float3(0.9f, 0.9f, 0.95f);
+            panelCol = uiRaised;
+            if (px.y >= topBarH + 31.0f) panelCol = uiBorder;
+            if ((Str9Coverage(px, float2(w - rightDockW + 15.0f, topBarH + 9.0f), 'I', 'n', 's', 'p', 'e', 'c', 't', 'o', 'r', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.9f, 0.9f, 0.95f), Str9Coverage(px, float2(w - rightDockW + 15.0f, topBarH + 9.0f), 'I', 'n', 's', 'p', 'e', 'c', 't', 'o', 'r', 1.0f));
         } else {
             float relY = px.y - (topBarH + 36.0f);
 
             // SECTION 1: TRANSFORM
             if (relY >= 0.0f && relY <= 24.0f) {
-                panelCol = float3(0.15f, 0.17f, 0.25f);
-                if (Str9(px, float2(w - rightDockW + 15.0f, topBarH + 42.0f), 'T', 'R', 'A', 'N', 'S', 'F', 'O', 'R', 'M', 1.0f)) panelCol = float3(1, 1, 1);
+                panelCol = uiPanelHeader;
+                if ((Str9Coverage(px, float2(w - rightDockW + 15.0f, topBarH + 42.0f), 'T', 'r', 'a', 'n', 's', 'f', 'o', 'r', 'm', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), Str9Coverage(px, float2(w - rightDockW + 15.0f, topBarH + 42.0f), 'T', 'r', 'a', 'n', 's', 'f', 'o', 'r', 'm', 1.0f));
             }
             if (selId < 0) {
-                if (Str10(px, float2(w - rightDockW + 15.0f, topBarH + 72.0f), 'S', 'E', 'L', 'E', 'C', 'T', ' ', 'A', 'N', 'O', 1.0f)) panelCol = float3(0.60f, 0.66f, 0.76f);
-                if (Str5(px, float2(w - rightDockW + 15.0f, topBarH + 88.0f), 'O', 'B', 'J', 'E', 'C', 1.0f)) panelCol = float3(0.60f, 0.66f, 0.76f);
-            } else if (relY >= 30.0f && relY <= 160.0f) {
-                int rowIdx = (int)floor((relY - 30.0f) / 26.0f);
-                float yRow = topBarH + 68.0f + (float)rowIdx * 26.0f;
-                if (rowIdx == 0 && Str5(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'O', 'S', ' ', 'X', 1.0f)) panelCol = float3(0.95f, 0.48f, 0.46f);
-                else if (rowIdx == 1 && Str5(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'O', 'S', ' ', 'Y', 1.0f)) panelCol = float3(0.46f, 0.88f, 0.55f);
-                else if (rowIdx == 2 && Str5(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'O', 'S', ' ', 'Z', 1.0f)) panelCol = float3(0.49f, 0.68f, 1.0f);
-                else if (rowIdx == 3 && Str5(px, float2(w - rightDockW + 15.0f, yRow), 'R', 'O', 'T', ' ', 'Y', 1.0f)) panelCol = float3(0.80f, 0.69f, 1.0f);
-                else if (rowIdx == 4 && Str5(px, float2(w - rightDockW + 15.0f, yRow), 'S', 'C', 'A', 'L', 'E', 1.0f)) panelCol = float3(0.50f, 0.82f, 0.92f);
+                if ((Str9Coverage(px, float2(w - rightDockW + 15.0f, topBarH + 72.0f), 'S', 'e', 'l', 'e', 'c', 't', ' ', 'A', 'n', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.66f, 0.71f, 0.79f), Str9Coverage(px, float2(w - rightDockW + 15.0f, topBarH + 72.0f), 'S', 'e', 'l', 'e', 'c', 't', ' ', 'A', 'n', 1.0f));
+                if ((Str6Coverage(px, float2(w - rightDockW + 15.0f, topBarH + 88.0f), 'O', 'b', 'j', 'e', 'c', 't', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.66f, 0.71f, 0.79f), Str6Coverage(px, float2(w - rightDockW + 15.0f, topBarH + 88.0f), 'O', 'b', 'j', 'e', 'c', 't', 1.0f));
+            } else if (relY >= 30.0f && relY <= 168.0f) {
+                int rowIdx = (int)floor((relY - 30.0f) / 28.0f);
+                float yRow = topBarH + 68.0f + (float)rowIdx * 28.0f + 5.0f;
+                if ((min(((rowIdx == 0) ? 1.0f : 0.0f), Str10Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'o', 's', 'i', 't', 'i', 'o', 'n', ' ', 'X', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.95f, 0.48f, 0.46f), min(((rowIdx == 0) ? 1.0f : 0.0f), Str10Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'o', 's', 'i', 't', 'i', 'o', 'n', ' ', 'X', 1.0f)));
+                else if ((min(((rowIdx == 1) ? 1.0f : 0.0f), Str10Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'o', 's', 'i', 't', 'i', 'o', 'n', ' ', 'Y', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.46f, 0.88f, 0.55f), min(((rowIdx == 1) ? 1.0f : 0.0f), Str10Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'o', 's', 'i', 't', 'i', 'o', 'n', ' ', 'Y', 1.0f)));
+                else if ((min(((rowIdx == 2) ? 1.0f : 0.0f), Str10Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'o', 's', 'i', 't', 'i', 'o', 'n', ' ', 'Z', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.49f, 0.68f, 1.0f), min(((rowIdx == 2) ? 1.0f : 0.0f), Str10Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'P', 'o', 's', 'i', 't', 'i', 'o', 'n', ' ', 'Z', 1.0f)));
+                else if ((min(((rowIdx == 3) ? 1.0f : 0.0f), Str10Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'R', 'o', 't', 'a', 't', 'i', 'o', 'n', ' ', 'Y', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.80f, 0.69f, 1.0f), min(((rowIdx == 3) ? 1.0f : 0.0f), Str10Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'R', 'o', 't', 'a', 't', 'i', 'o', 'n', ' ', 'Y', 1.0f)));
+                else if ((min(((rowIdx == 4) ? 1.0f : 0.0f), Str5Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'S', 'c', 'a', 'l', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.50f, 0.82f, 0.92f), min(((rowIdx == 4) ? 1.0f : 0.0f), Str5Coverage(px, float2(w - rightDockW + 15.0f, yRow), 'S', 'c', 'a', 'l', 'e', 1.0f)));
 
-                float2 minusMin = float2(w - rightDockW + 80.0f, yRow - 2.0f);
-                float2 minusMax = minusMin + float2(25.0f, 18.0f);
+                float2 minusMin = float2(w - rightDockW + 107.0f, yRow - 7.0f);
+                float2 minusMax = minusMin + float2(25.0f, 22.0f);
                 if (px.x >= minusMin.x && px.x <= minusMax.x && px.y >= minusMin.y && px.y <= minusMax.y) {
                     panelCol = IsHovered(px, minusMin, minusMax) ? float3(0.33f, 0.38f, 0.50f) : float3(0.20f, 0.23f, 0.31f);
-                    if (IsChar(px, float2(w - rightDockW + 90.0f, yRow), '-', 1.0f)) panelCol = float3(1, 1, 1);
+                    if ((IsCharCoverage(px, float2(w - rightDockW + 116.0f, yRow), '-', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), IsCharCoverage(px, float2(w - rightDockW + 116.0f, yRow), '-', 1.0f));
                 }
 
-                float2 valueMin = float2(w - rightDockW + 112.0f, yRow - 2.0f);
-                float2 valueMax = valueMin + float2(113.0f, 18.0f);
+                float2 valueMin = float2(w - rightDockW + 137.0f, yRow - 7.0f);
+                float2 valueMax = valueMin + float2(133.0f, 22.0f);
                 if (px.x >= valueMin.x && px.x <= valueMax.x && px.y >= valueMin.y && px.y <= valueMax.y) {
                     panelCol = IsHovered(px, valueMin, valueMax) ? float3(0.17f, 0.20f, 0.28f) : float3(0.12f, 0.14f, 0.19f);
                     float numberValue = rowIdx == 0 ? SelectedPositionX : rowIdx == 1 ? SelectedPositionY : rowIdx == 2 ? SelectedPositionZ : rowIdx == 3 ? SelectedRotationDegrees : SelectedScale;
-                    if (DrawFixedNumber(px, float2(w - rightDockW + 140.0f, yRow), numberValue)) panelCol = float3(0.91f, 0.94f, 1.0f);
+                    if ((DrawFixedNumberCoverage(px, float2(w - rightDockW + 203.5f, yRow + 6.0f), numberValue)) > 0.0f) panelCol = lerp(panelCol, float3(0.91f, 0.94f, 1.0f), DrawFixedNumberCoverage(px, float2(w - rightDockW + 203.5f, yRow + 6.0f), numberValue));
                 }
 
-                float2 plusMin = float2(w - rightDockW + 232.0f, yRow - 2.0f);
-                float2 plusMax = plusMin + float2(25.0f, 18.0f);
+                float2 plusMin = float2(w - rightDockW + 275.0f, yRow - 7.0f);
+                float2 plusMax = plusMin + float2(25.0f, 22.0f);
                 if (px.x >= plusMin.x && px.x <= plusMax.x && px.y >= plusMin.y && px.y <= plusMax.y) {
                     panelCol = IsHovered(px, plusMin, plusMax) ? float3(0.33f, 0.38f, 0.50f) : float3(0.20f, 0.23f, 0.31f);
-                    if (IsChar(px, float2(w - rightDockW + 241.0f, yRow), '+', 1.0f)) panelCol = float3(1, 1, 1);
+                    if ((IsCharCoverage(px, float2(w - rightDockW + 284.0f, yRow), '+', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), IsCharCoverage(px, float2(w - rightDockW + 284.0f, yRow), '+', 1.0f));
                 }
             } else if (relY >= 168.0f && relY <= 324.0f) {
-                panelCol = float3(0.08f, 0.09f, 0.12f);
+                panelCol = uiCanvas;
                 float componentY = topBarH + 238.0f;
                 if (relY <= 196.0f) {
-                    panelCol = float3(0.15f, 0.17f, 0.25f);
-                    if (Str10(px, float2(w - rightDockW + 18.0f, topBarH + 212.0f), 'C', 'O', 'M', 'P', 'O', 'N', 'E', 'N', 'T', 'S', 1.0f)) panelCol = float3(0.93f, 0.94f, 0.98f);
+                    panelCol = uiPanelHeader;
+                    if ((Str10Coverage(px, float2(w - rightDockW + 18.0f, topBarH + 212.0f), 'C', 'o', 'm', 'p', 'o', 'n', 'e', 'n', 't', 's', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.93f, 0.94f, 0.98f), Str10Coverage(px, float2(w - rightDockW + 18.0f, topBarH + 212.0f), 'C', 'o', 'm', 'p', 'o', 'n', 'e', 'n', 't', 's', 1.0f));
                 }
                 bool hasComponent = false;
                 if ((EntityComponents & 1u) != 0u) {
                     hasComponent = true;
-                    if (Str9(px, float2(w - rightDockW + 18.0f, componentY), 'R', 'I', 'G', 'I', 'D', 'B', 'O', 'D', 'Y', 1.0f)) panelCol = float3(0.82f, 0.85f, 0.92f);
+                    if ((Str9Coverage(px, float2(w - rightDockW + 18.0f, componentY), 'R', 'i', 'g', 'i', 'd', 'b', 'o', 'd', 'y', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.82f, 0.85f, 0.92f), Str9Coverage(px, float2(w - rightDockW + 18.0f, componentY), 'R', 'i', 'g', 'i', 'd', 'b', 'o', 'd', 'y', 1.0f));
                 }
                 if ((EntityComponents & 2u) != 0u) {
                     hasComponent = true;
-                    if (Str10(px, float2(w - rightDockW + 18.0f, componentY + 26.0f), 'B', 'O', 'X', ' ', 'C', 'O', 'L', 'L', 'I', 'D', 1.0f)) panelCol = float3(0.82f, 0.85f, 0.92f);
+                    if ((Str12Coverage(px, float2(w - rightDockW + 18.0f, componentY + 26.0f), 'B', 'o', 'x', ' ', 'C', 'o', 'l', 'l', 'i', 'd', 'e', 'r', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.82f, 0.85f, 0.92f), Str12Coverage(px, float2(w - rightDockW + 18.0f, componentY + 26.0f), 'B', 'o', 'x', ' ', 'C', 'o', 'l', 'l', 'i', 'd', 'e', 'r', 1.0f));
                 }
                 if ((EntityComponents & 4u) != 0u) {
                     hasComponent = true;
-                    if (Str10(px, float2(w - rightDockW + 18.0f, componentY + 52.0f), 'A', 'U', 'D', 'I', 'O', ' ', 'S', 'O', 'U', 'R', 1.0f)) panelCol = float3(0.82f, 0.85f, 0.92f);
+                    if ((Str12Coverage(px, float2(w - rightDockW + 18.0f, componentY + 52.0f), 'A', 'u', 'd', 'i', 'o', ' ', 'S', 'o', 'u', 'r', 'c', 'e', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.82f, 0.85f, 0.92f), Str12Coverage(px, float2(w - rightDockW + 18.0f, componentY + 52.0f), 'A', 'u', 'd', 'i', 'o', ' ', 'S', 'o', 'u', 'r', 'c', 'e', 1.0f));
                 }
                 if ((EntityComponents & 8u) != 0u) {
                     hasComponent = true;
-                    if (Str6(px, float2(w - rightDockW + 18.0f, componentY + 78.0f), 'S', 'C', 'R', 'I', 'P', 'T', 1.0f)) panelCol = float3(0.82f, 0.85f, 0.92f);
+                    if ((Str6Coverage(px, float2(w - rightDockW + 18.0f, componentY + 78.0f), 'S', 'c', 'r', 'i', 'p', 't', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.82f, 0.85f, 0.92f), Str6Coverage(px, float2(w - rightDockW + 18.0f, componentY + 78.0f), 'S', 'c', 'r', 'i', 'p', 't', 1.0f));
                 }
                 if ((EntityComponents & 16u) != 0u) {
                     hasComponent = true;
-                    if (Str10(px, float2(w - rightDockW + 18.0f, componentY + 104.0f), 'P', 'A', 'R', 'T', 'I', 'C', 'L', 'E', ' ', 'E', 1.0f)) panelCol = float3(0.82f, 0.85f, 0.92f);
+                    if ((Str17Coverage(px, float2(w - rightDockW + 18.0f, componentY + 104.0f), 'P', 'a', 'r', 't', 'i', 'c', 'l', 'e', ' ', 'E', 'm', 'i', 't', 't', 'e', 'r', ' ', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.82f, 0.85f, 0.92f), Str17Coverage(px, float2(w - rightDockW + 18.0f, componentY + 104.0f), 'P', 'a', 'r', 't', 'i', 'c', 'l', 'e', ' ', 'E', 'm', 'i', 't', 't', 'e', 'r', ' ', 1.0f));
                 }
-                if (!hasComponent && Str5(px, float2(w - rightDockW + 18.0f, componentY), 'E', 'M', 'P', 'T', 'Y', 1.0f)) panelCol = float3(0.54f, 0.58f, 0.67f);
+                if ((min(((!hasComponent) ? 1.0f : 0.0f), Str5Coverage(px, float2(w - rightDockW + 18.0f, componentY), 'E', 'm', 'p', 't', 'y', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.54f, 0.58f, 0.67f), min(((!hasComponent) ? 1.0f : 0.0f), Str5Coverage(px, float2(w - rightDockW + 18.0f, componentY), 'E', 'm', 'p', 't', 'y', 1.0f)));
             } else if (relY >= 340.0f && relY <= 370.0f) {
                 float2 btnMin = float2(w - rightDockW + 20.0f, topBarH + 376.0f);
                 float2 btnMax = float2(w - 20.0f, topBarH + 406.0f);
-                panelCol = IsHovered(px, btnMin, btnMax) ? float3(0.24f, 0.43f, 0.70f) : float3(0.16f, 0.29f, 0.49f);
-                if (Str10(px, float2(btnMin.x + 35.0f, btnMin.y + 9.0f), '+', ' ', 'A', 'D', 'D', ' ', 'C', 'O', 'M', 'P', 1.0f)) panelCol = float3(1, 1, 1);
+                panelCol = IsHovered(px, btnMin, btnMax) ? uiAccent : uiAccentMuted;
+                if ((Str13Coverage(px, float2(btnMin.x + 86.0f, btnMin.y + 9.0f), 'A', 'd', 'd', ' ', 'C', 'o', 'm', 'p', 'o', 'n', 'e', 'n', 't', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), Str13Coverage(px, float2(btnMin.x + 86.0f, btnMin.y + 9.0f), 'A', 'd', 'd', ' ', 'C', 'o', 'm', 'p', 'o', 'n', 'e', 'n', 't', 1.0f));
             }
         }
 
-        if (px.x <= w - rightDockW + 1.0f) panelCol = float3(0.20f, 0.22f, 0.30f);
+        if (px.x <= w - rightDockW + 1.0f) panelCol = uiBorder;
         finalColor = panelCol;
     }
 
@@ -891,32 +1014,32 @@ float4 PSMain(VSOutput input) : SV_Target {
     // 5. BOTTOM DOCK: CONTENT BROWSER & CONSOLE
     // =========================================================================
     if (px.y >= h - bottomDockH) {
-        float3 panelCol = float3(0.08f, 0.09f, 0.12f);
+        float3 panelCol = uiCanvas;
         int tab = int(Param5);
 
         if (px.y < h - bottomDockH + 28.0f) {
-            panelCol = float3(0.11f, 0.12f, 0.16f);
+            panelCol = uiSurface;
             if (px.x >= 15.0f && px.x <= 150.0f) {
-                panelCol = (tab == 0) ? float3(0.16f, 0.20f, 0.28f) : float3(0.11f, 0.12f, 0.16f);
-                if (tab == 0 && px.y >= h - bottomDockH + 26.0f) panelCol = float3(1.0f, 0.75f, 0.0f);
+                panelCol = (tab == 0) ? uiPanelHeader : uiSurface;
+                if (tab == 0 && px.y >= h - bottomDockH + 26.0f) panelCol = uiAccentBright;
             } else if (px.x >= 160.0f && px.x <= 260.0f) {
-                panelCol = (tab == 1) ? float3(0.16f, 0.20f, 0.28f) : float3(0.11f, 0.12f, 0.16f);
-                if (tab == 1 && px.y >= h - bottomDockH + 26.0f) panelCol = float3(1.0f, 0.75f, 0.0f);
+                panelCol = (tab == 1) ? uiPanelHeader : uiSurface;
+                if (tab == 1 && px.y >= h - bottomDockH + 26.0f) panelCol = uiAccentBright;
             }
 
-            if (Str6(px, float2(25.0f, h - bottomDockH + 8.0f), 'C', 'R', 'E', 'A', 'T', 'E', 1.0f)) panelCol = (tab == 0) ? float3(1, 1, 1) : float3(0.6f, 0.65f, 0.75f);
-            if (Str9(px, float2(170.0f, h - bottomDockH + 8.0f), 'S', 'H', 'O', 'R', 'T', 'C', 'U', 'T', 'S', 1.0f)) panelCol = (tab == 1) ? float3(1, 1, 1) : float3(0.6f, 0.65f, 0.75f);
+            if ((Str6Coverage(px, float2(25.0f, h - bottomDockH + 8.0f), 'C', 'r', 'e', 'a', 't', 'e', 1.0f)) > 0.0f) panelCol = lerp(panelCol, (tab == 0) ? float3(1, 1, 1) : float3(0.6f, 0.65f, 0.75f), Str6Coverage(px, float2(25.0f, h - bottomDockH + 8.0f), 'C', 'r', 'e', 'a', 't', 'e', 1.0f));
+            if ((Str9Coverage(px, float2(170.0f, h - bottomDockH + 8.0f), 'S', 'h', 'o', 'r', 't', 'c', 'u', 't', 's', 1.0f)) > 0.0f) panelCol = lerp(panelCol, (tab == 1) ? float3(1, 1, 1) : float3(0.6f, 0.65f, 0.75f), Str9Coverage(px, float2(170.0f, h - bottomDockH + 8.0f), 'S', 'h', 'o', 'r', 't', 'c', 'u', 't', 's', 1.0f));
         } else {
             if (tab == 0) {
                 // Scene-creation help
                 if (px.x < 180.0f) {
                     panelCol = float3(0.09f, 0.10f, 0.14f);
                     float f0Y = h - bottomDockH + 36.0f;
-                    if (Str10(px, float2(15.0f, f0Y + 8.0f), 'P', 'R', 'I', 'M', 'I', 'T', 'I', 'V', 'E', 'S', 1.0f)) panelCol = float3(0.80f, 0.84f, 0.93f);
-                    if (Str10(px, float2(15.0f, f0Y + 38.0f), 'A', 'D', 'D', ' ', 'O', 'B', 'J', 'E', 'C', 'T', 1.0f)) panelCol = float3(0.57f, 0.63f, 0.74f);
-                    if (Str10(px, float2(15.0f, f0Y + 58.0f), 'C', 'L', 'I', 'C', 'K', ' ', 'C', 'A', 'R', 'D', 1.0f)) panelCol = float3(0.57f, 0.63f, 0.74f);
-                    if (Str6(px, float2(15.0f, f0Y + 76.0f), 'T', 'O', ' ', 'A', 'D', 'D', 1.0f)) panelCol = float3(0.57f, 0.63f, 0.74f);
-                    if (px.x >= 179.0f) panelCol = float3(0.20f, 0.22f, 0.30f);
+                    if ((Str10Coverage(px, float2(15.0f, f0Y + 8.0f), 'P', 'r', 'i', 'm', 'i', 't', 'i', 'v', 'e', 's', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.80f, 0.84f, 0.93f), Str10Coverage(px, float2(15.0f, f0Y + 8.0f), 'P', 'r', 'i', 'm', 'i', 't', 'i', 'v', 'e', 's', 1.0f));
+                    if ((Str10Coverage(px, float2(15.0f, f0Y + 38.0f), 'A', 'd', 'd', ' ', 'O', 'b', 'j', 'e', 'c', 't', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.57f, 0.63f, 0.74f), Str10Coverage(px, float2(15.0f, f0Y + 38.0f), 'A', 'd', 'd', ' ', 'O', 'b', 'j', 'e', 'c', 't', 1.0f));
+                    if ((Str10Coverage(px, float2(15.0f, f0Y + 58.0f), 'C', 'l', 'i', 'c', 'k', ' ', 'C', 'a', 'r', 'd', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.57f, 0.63f, 0.74f), Str10Coverage(px, float2(15.0f, f0Y + 58.0f), 'C', 'l', 'i', 'c', 'k', ' ', 'C', 'a', 'r', 'd', 1.0f));
+                    if ((Str6Coverage(px, float2(15.0f, f0Y + 76.0f), 'T', 'o', ' ', 'A', 'd', 'd', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.57f, 0.63f, 0.74f), Str6Coverage(px, float2(15.0f, f0Y + 76.0f), 'T', 'o', ' ', 'A', 'd', 'd', 1.0f));
+                    if (px.x >= 179.0f) panelCol = uiBorder;
                 } else {
                     for (int c = 0; c < 5; ++c) {
                         float cMinX = 200.0f + c * 115.0f;
@@ -934,36 +1057,36 @@ float4 PSMain(VSOutput input) : SV_Target {
                                        c == 3 ? DrawPlaneIcon(px, float2(cMinX + 42.0f, cMinY + 10.0f)) : DrawLightIcon(px, float2(cMinX + 42.0f, cMinY + 10.0f));
                         if (iconHit) panelCol = c == 0 ? float3(0.95f, 0.59f, 0.40f) : c == 1 ? float3(0.52f, 0.78f, 1.0f) : c == 2 ? float3(0.53f, 0.89f, 0.59f) : c == 3 ? float3(0.86f, 0.88f, 0.95f) : float3(1.0f, 0.86f, 0.36f);
                         float labelY = cMinY + 74.0f;
-                        if (c == 0 && Str4(px, float2(cMinX + 18.0f, labelY), 'C', 'U', 'B', 'E', 1.0f)) panelCol = float3(1, 1, 1);
-                        else if (c == 1 && Str6(px, float2(cMinX + 12.0f, labelY), 'S', 'P', 'H', 'E', 'R', 'E', 1.0f)) panelCol = float3(1, 1, 1);
-                        else if (c == 2 && Str8(px, float2(cMinX + 14.0f, labelY), 'C', 'Y', 'L', 'I', 'N', 'D', 'E', 'R', 1.0f)) panelCol = float3(1, 1, 1);
-                        else if (c == 3 && Str5(px, float2(cMinX + 16.0f, labelY), 'P', 'L', 'A', 'N', 'E', 1.0f)) panelCol = float3(1, 1, 1);
-                        else if (c == 4 && Str5(px, float2(cMinX + 16.0f, labelY), 'L', 'I', 'G', 'H', 'T', 1.0f)) panelCol = float3(1, 1, 1);
+                        if ((min(((c == 0) ? 1.0f : 0.0f), Str4Coverage(px, float2(cMinX + 18.0f, labelY), 'C', 'u', 'b', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((c == 0) ? 1.0f : 0.0f), Str4Coverage(px, float2(cMinX + 18.0f, labelY), 'C', 'u', 'b', 'e', 1.0f)));
+                        else if ((min(((c == 1) ? 1.0f : 0.0f), Str6Coverage(px, float2(cMinX + 12.0f, labelY), 'S', 'p', 'h', 'e', 'r', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((c == 1) ? 1.0f : 0.0f), Str6Coverage(px, float2(cMinX + 12.0f, labelY), 'S', 'p', 'h', 'e', 'r', 'e', 1.0f)));
+                        else if ((min(((c == 2) ? 1.0f : 0.0f), Str8Coverage(px, float2(cMinX + 14.0f, labelY), 'C', 'y', 'l', 'i', 'n', 'd', 'e', 'r', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((c == 2) ? 1.0f : 0.0f), Str8Coverage(px, float2(cMinX + 14.0f, labelY), 'C', 'y', 'l', 'i', 'n', 'd', 'e', 'r', 1.0f)));
+                        else if ((min(((c == 3) ? 1.0f : 0.0f), Str5Coverage(px, float2(cMinX + 16.0f, labelY), 'P', 'l', 'a', 'n', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((c == 3) ? 1.0f : 0.0f), Str5Coverage(px, float2(cMinX + 16.0f, labelY), 'P', 'l', 'a', 'n', 'e', 1.0f)));
+                        else if ((min(((c == 4) ? 1.0f : 0.0f), Str5Coverage(px, float2(cMinX + 16.0f, labelY), 'L', 'i', 'g', 'h', 't', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(1, 1, 1), min(((c == 4) ? 1.0f : 0.0f), Str5Coverage(px, float2(cMinX + 16.0f, labelY), 'L', 'i', 'g', 'h', 't', 1.0f)));
                     }
                 }
             } else {
                 // Truthful keyboard reference for implemented editor actions
                 panelCol = float3(0.06f, 0.07f, 0.09f);
                 float logStartY = h - bottomDockH + 34.0f;
-                if (Str6(px, float2(24.0f, logStartY + 10.0f), 'C', 'T', 'R', 'L', '+', 'S', 1.0f) || Str10(px, float2(120.0f, logStartY + 10.0f), 'S', 'A', 'V', 'E', ' ', 'S', 'C', 'E', 'N', 'E', 1.0f)) panelCol = float3(0.84f, 0.88f, 0.98f);
-                if (Str6(px, float2(24.0f, logStartY + 36.0f), 'C', 'T', 'R', 'L', '+', 'O', 1.0f) || Str10(px, float2(120.0f, logStartY + 36.0f), 'O', 'P', 'E', 'N', ' ', 'S', 'C', 'E', 'N', 'E', 1.0f)) panelCol = float3(0.84f, 0.88f, 0.98f);
-                if (Str8(px, float2(24.0f, logStartY + 62.0f), 'C', 'T', 'R', 'L', '+', 'Z', '/', 'Y', 1.0f) || Str9(px, float2(120.0f, logStartY + 62.0f), 'U', 'N', 'D', 'O', '/', 'R', 'E', 'D', 'O', 1.0f)) panelCol = float3(0.84f, 0.88f, 0.98f);
-                if (Str7(px, float2(24.0f, logStartY + 88.0f), 'Q', ' ', 'W', ' ', 'E', ' ', 'R', 1.0f) || Str10(px, float2(120.0f, logStartY + 88.0f), 'G', 'I', 'Z', 'M', 'O', ' ', 'T', 'O', 'O', 'L', 1.0f)) panelCol = float3(0.84f, 0.88f, 0.98f);
-                if (Str8(px, float2(24.0f, logStartY + 114.0f), 'R', 'M', 'B', '+', 'W', 'A', 'S', 'D', 1.0f) || Str6(px, float2(120.0f, logStartY + 114.0f), 'C', 'A', 'M', 'E', 'R', 'A', 1.0f)) panelCol = float3(0.84f, 0.88f, 0.98f);
+                if ((max(Str6Coverage(px, float2(24.0f, logStartY + 10.0f), 'C', 'T', 'R', 'L', '+', 'S', 1.0f), Str10Coverage(px, float2(120.0f, logStartY + 10.0f), 'S', 'a', 'v', 'e', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.84f, 0.88f, 0.98f), max(Str6Coverage(px, float2(24.0f, logStartY + 10.0f), 'C', 'T', 'R', 'L', '+', 'S', 1.0f), Str10Coverage(px, float2(120.0f, logStartY + 10.0f), 'S', 'a', 'v', 'e', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f)));
+                if ((max(Str6Coverage(px, float2(24.0f, logStartY + 36.0f), 'C', 'T', 'R', 'L', '+', 'O', 1.0f), Str10Coverage(px, float2(120.0f, logStartY + 36.0f), 'O', 'p', 'e', 'n', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.84f, 0.88f, 0.98f), max(Str6Coverage(px, float2(24.0f, logStartY + 36.0f), 'C', 'T', 'R', 'L', '+', 'O', 1.0f), Str10Coverage(px, float2(120.0f, logStartY + 36.0f), 'O', 'p', 'e', 'n', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f)));
+                if ((max(Str8Coverage(px, float2(24.0f, logStartY + 62.0f), 'C', 'T', 'R', 'L', '+', 'Z', '/', 'Y', 1.0f), Str9Coverage(px, float2(120.0f, logStartY + 62.0f), 'U', 'N', 'D', 'O', '/', 'R', 'E', 'D', 'O', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.84f, 0.88f, 0.98f), max(Str8Coverage(px, float2(24.0f, logStartY + 62.0f), 'C', 'T', 'R', 'L', '+', 'Z', '/', 'Y', 1.0f), Str9Coverage(px, float2(120.0f, logStartY + 62.0f), 'U', 'N', 'D', 'O', '/', 'R', 'E', 'D', 'O', 1.0f)));
+                if ((max(Str7Coverage(px, float2(24.0f, logStartY + 88.0f), 'Q', ' ', 'W', ' ', 'E', ' ', 'R', 1.0f), Str10Coverage(px, float2(120.0f, logStartY + 88.0f), 'G', 'i', 'z', 'm', 'o', ' ', 'T', 'o', 'o', 'l', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.84f, 0.88f, 0.98f), max(Str7Coverage(px, float2(24.0f, logStartY + 88.0f), 'Q', ' ', 'W', ' ', 'E', ' ', 'R', 1.0f), Str10Coverage(px, float2(120.0f, logStartY + 88.0f), 'G', 'i', 'z', 'm', 'o', ' ', 'T', 'o', 'o', 'l', 1.0f)));
+                if ((max(Str8Coverage(px, float2(24.0f, logStartY + 114.0f), 'R', 'M', 'B', '+', 'W', 'A', 'S', 'D', 1.0f), Str6Coverage(px, float2(120.0f, logStartY + 114.0f), 'C', 'a', 'm', 'e', 'r', 'a', 1.0f))) > 0.0f) panelCol = lerp(panelCol, float3(0.84f, 0.88f, 0.98f), max(Str8Coverage(px, float2(24.0f, logStartY + 114.0f), 'R', 'M', 'B', '+', 'W', 'A', 'S', 'D', 1.0f), Str6Coverage(px, float2(120.0f, logStartY + 114.0f), 'C', 'a', 'm', 'e', 'r', 'a', 1.0f)));
             }
 
             if (px.y >= h - 22.0f) {
                 panelCol = float3(0.07f, 0.07f, 0.10f);
                 if (px.x >= 15.0f && px.x <= 23.0f && px.y >= h - 15.0f && px.y <= h - 7.0f) panelCol = float3(0.2f, 0.9f, 0.4f);
-                if (Str5(px, float2(32.0f, h - 15.0f), 'D', '3', 'D', '1', '2', 1.0f)) panelCol = float3(0.55f, 0.79f, 1.0f);
-                if (Str5(px, float2(100.0f, h - 15.0f), 'S', 'C', 'E', 'N', 'E', 1.0f)) panelCol = float3(0.72f, 0.76f, 0.84f);
+                if ((Str5Coverage(px, float2(32.0f, h - 15.0f), 'D', '3', 'D', '1', '2', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.55f, 0.79f, 1.0f), Str5Coverage(px, float2(32.0f, h - 15.0f), 'D', '3', 'D', '1', '2', 1.0f));
+                if ((Str5Coverage(px, float2(100.0f, h - 15.0f), 'S', 'c', 'e', 'n', 'e', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.72f, 0.76f, 0.84f), Str5Coverage(px, float2(100.0f, h - 15.0f), 'S', 'c', 'e', 'n', 'e', 1.0f));
                 if (SceneDirty > 0.5f) {
-                    if (Str5(px, float2(158.0f, h - 15.0f), 'D', 'I', 'R', 'T', 'Y', 1.0f)) panelCol = float3(1.0f, 0.73f, 0.34f);
-                } else if (Str5(px, float2(158.0f, h - 15.0f), 'S', 'A', 'V', 'E', 'D', 1.0f)) panelCol = float3(0.51f, 0.83f, 0.64f);
+                    if ((Str5Coverage(px, float2(158.0f, h - 15.0f), 'D', 'i', 'r', 't', 'y', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(1.0f, 0.73f, 0.34f), Str5Coverage(px, float2(158.0f, h - 15.0f), 'D', 'i', 'r', 't', 'y', 1.0f));
+                } else if ((Str5Coverage(px, float2(158.0f, h - 15.0f), 'S', 'a', 'v', 'e', 'd', 1.0f)) > 0.0f) panelCol = lerp(panelCol, float3(0.51f, 0.83f, 0.64f), Str5Coverage(px, float2(158.0f, h - 15.0f), 'S', 'a', 'v', 'e', 'd', 1.0f));
             }
         }
 
-        if (px.y <= h - bottomDockH + 1.0f) panelCol = float3(0.20f, 0.22f, 0.30f);
+        if (px.y <= h - bottomDockH + 1.0f) panelCol = uiBorder;
         finalColor = panelCol;
     }
 
@@ -985,9 +1108,9 @@ float4 PSMain(VSOutput input) : SV_Target {
             if (px.y <= modMin.y + 34.0f) {
                 finalColor = float3(0.16f, 0.24f, 0.35f);
                 if (Param6 > 2.5f) {
-                    if (Str10(px, float2(modMin.x + 20.0f, modMin.y + 10.0f), 'A', 'D', 'D', ' ', 'C', 'O', 'M', 'P', 'O', 'N', 1.0f)) finalColor = float3(1, 1, 1);
+                    if ((Str10Coverage(px, float2(modMin.x + 20.0f, modMin.y + 10.0f), 'A', 'd', 'd', ' ', 'C', 'o', 'm', 'p', 'o', 'n', 1.0f)) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), Str10Coverage(px, float2(modMin.x + 20.0f, modMin.y + 10.0f), 'A', 'd', 'd', ' ', 'C', 'o', 'm', 'p', 'o', 'n', 1.0f));
                 } else {
-                    if (Str10(px, float2(modMin.x + 20.0f, modMin.y + 10.0f), 'B', 'U', 'I', 'L', 'D', ' ', 'S', 'U', 'C', 'C', 1.0f)) finalColor = float3(1, 1, 1);
+                    if ((Str10Coverage(px, float2(modMin.x + 20.0f, modMin.y + 10.0f), 'B', 'u', 'i', 'l', 'd', ' ', 'S', 'u', 'c', 'c', 1.0f)) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), Str10Coverage(px, float2(modMin.x + 20.0f, modMin.y + 10.0f), 'B', 'u', 'i', 'l', 'd', ' ', 'S', 'u', 'c', 'c', 1.0f));
                 }
             }
 
@@ -995,31 +1118,31 @@ float4 PSMain(VSOutput input) : SV_Target {
                 for (int comp = 0; comp < 5; ++comp) {
                     float itemY = modMin.y + 50.0f + comp * 42.0f;
                     if (px.y >= itemY && px.y <= itemY + 36.0f && px.x >= modMin.x + 15.0f && px.x <= modMax.x - 15.0f) {
-                        finalColor = float3(0.18f, 0.25f, 0.40f);
+                        finalColor = uiHover;
                     }
-                    if (comp == 0 && Str10(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'R', 'I', 'G', 'I', 'D', 'B', 'O', 'D', 'Y', ' ', 1.0f)) finalColor = float3(1, 1, 1);
-                    else if (comp == 1 && Str10(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'B', 'O', 'X', ' ', 'C', 'O', 'L', 'L', 'I', 'D', 1.0f)) finalColor = float3(1, 1, 1);
-                    else if (comp == 2 && Str10(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'A', 'U', 'D', 'I', 'O', ' ', 'S', 'O', 'U', 'R', 1.0f)) finalColor = float3(1, 1, 1);
-                    else if (comp == 3 && Str10(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'S', 'C', 'R', 'I', 'P', 'T', ' ', 'C', 'O', 'M', 1.0f)) finalColor = float3(1, 1, 1);
-                    else if (comp == 4 && Str10(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'P', 'A', 'R', 'T', 'I', 'C', 'L', 'E', ' ', 'E', 1.0f)) finalColor = float3(1, 1, 1);
+                    if ((min(((comp == 0) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'R', 'i', 'g', 'i', 'd', 'b', 'o', 'd', 'y', ' ', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((comp == 0) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'R', 'i', 'g', 'i', 'd', 'b', 'o', 'd', 'y', ' ', 1.0f)));
+                    else if ((min(((comp == 1) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'B', 'o', 'x', ' ', 'C', 'o', 'l', 'l', 'i', 'd', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((comp == 1) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'B', 'o', 'x', ' ', 'C', 'o', 'l', 'l', 'i', 'd', 1.0f)));
+                    else if ((min(((comp == 2) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'A', 'u', 'd', 'i', 'o', ' ', 'S', 'o', 'u', 'r', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((comp == 2) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'A', 'u', 'd', 'i', 'o', ' ', 'S', 'o', 'u', 'r', 1.0f)));
+                    else if ((min(((comp == 3) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'S', 'c', 'r', 'i', 'p', 't', ' ', 'C', 'o', 'm', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((comp == 3) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'S', 'c', 'r', 'i', 'p', 't', ' ', 'C', 'o', 'm', 1.0f)));
+                    else if ((min(((comp == 4) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'P', 'a', 'r', 't', 'i', 'c', 'l', 'e', ' ', 'E', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((comp == 4) ? 1.0f : 0.0f), Str10Coverage(px, float2(modMin.x + 30.0f, itemY + 10.0f), 'P', 'a', 'r', 't', 'i', 'c', 'l', 'e', ' ', 'E', 1.0f)));
                 }
             } else { // Build Success Items
-                if (Str10(px, float2(modMin.x + 30.0f, modMin.y + 60.0f), 'P', 'R', 'O', 'J', 'E', 'C', 'T', ' ', 'P', 'A', 1.0f)) finalColor = float3(0.3f, 0.9f, 0.5f);
-                if (Str10(px, float2(modMin.x + 30.0f, modMin.y + 90.0f), 'D', 'I', 'S', 'T', ':', ' ', 'D', 'I', 'S', 'T', 1.0f)) finalColor = float3(0.8f, 0.85f, 0.95f);
-                if (Str10(px, float2(modMin.x + 30.0f, modMin.y + 120.0f), 'S', 'T', 'A', 'N', 'D', 'A', 'L', 'O', 'N', 'E', 1.0f)) finalColor = float3(0.8f, 0.85f, 0.95f);
+                if ((Str10Coverage(px, float2(modMin.x + 30.0f, modMin.y + 60.0f), 'P', 'r', 'o', 'j', 'e', 'c', 't', ' ', 'P', 'a', 1.0f)) > 0.0f) finalColor = lerp(finalColor, float3(0.3f, 0.9f, 0.5f), Str10Coverage(px, float2(modMin.x + 30.0f, modMin.y + 60.0f), 'P', 'r', 'o', 'j', 'e', 'c', 't', ' ', 'P', 'a', 1.0f));
+                if ((Str10Coverage(px, float2(modMin.x + 30.0f, modMin.y + 90.0f), 'D', 'i', 's', 't', ':', ' ', 'D', 'i', 's', 't', 1.0f)) > 0.0f) finalColor = lerp(finalColor, float3(0.8f, 0.85f, 0.95f), Str10Coverage(px, float2(modMin.x + 30.0f, modMin.y + 90.0f), 'D', 'i', 's', 't', ':', ' ', 'D', 'i', 's', 't', 1.0f));
+                if ((Str10Coverage(px, float2(modMin.x + 30.0f, modMin.y + 120.0f), 'S', 't', 'a', 'n', 'd', 'a', 'l', 'o', 'n', 'e', 1.0f)) > 0.0f) finalColor = lerp(finalColor, float3(0.8f, 0.85f, 0.95f), Str10Coverage(px, float2(modMin.x + 30.0f, modMin.y + 120.0f), 'S', 't', 'a', 'n', 'd', 'a', 'l', 'o', 'n', 'e', 1.0f));
 
                 float2 btnMin = float2(modMin.x + 30.0f, modMax.y - 60.0f);
                 float2 btnMax = float2(modMin.x + 290.0f, modMax.y - 20.0f);
                 if (px.x >= btnMin.x && px.x <= btnMax.x && px.y >= btnMin.y && px.y <= btnMax.y) {
                     finalColor = float3(0.18f, 0.65f, 0.35f);
-                    if (Str10(px, float2(btnMin.x + 20.0f, btnMin.y + 12.0f), 'L', 'A', 'U', 'N', 'C', 'H', ' ', 'G', 'A', 'M', 1.0f)) finalColor = float3(1, 1, 1);
+                    if ((Str10Coverage(px, float2(btnMin.x + 20.0f, btnMin.y + 12.0f), 'L', 'a', 'u', 'n', 'c', 'h', ' ', 'G', 'a', 'm', 1.0f)) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), Str10Coverage(px, float2(btnMin.x + 20.0f, btnMin.y + 12.0f), 'L', 'a', 'u', 'n', 'c', 'h', ' ', 'G', 'a', 'm', 1.0f));
                 }
 
                 float2 closeMin = float2(modMax.x - 140.0f, modMax.y - 60.0f);
                 float2 closeMax = float2(modMax.x - 30.0f, modMax.y - 20.0f);
                 if (px.x >= closeMin.x && px.x <= closeMax.x && px.y >= closeMin.y && px.y <= closeMax.y) {
                     finalColor = float3(0.25f, 0.28f, 0.38f);
-                    if (Str5(px, float2(closeMin.x + 28.0f, closeMin.y + 12.0f), 'C', 'L', 'O', 'S', 'E', 1.0f)) finalColor = float3(1, 1, 1);
+                    if ((Str5Coverage(px, float2(closeMin.x + 28.0f, closeMin.y + 12.0f), 'C', 'l', 'o', 's', 'e', 1.0f)) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), Str5Coverage(px, float2(closeMin.x + 28.0f, closeMin.y + 12.0f), 'C', 'l', 'o', 's', 'e', 1.0f));
                 }
             }
 
@@ -1037,15 +1160,15 @@ float4 PSMain(VSOutput input) : SV_Target {
         float2 dropMin = float2(80.0f, 32.0f);
         float2 dropMax = float2(220.0f, 32.0f + 115.0f);
         if (px.x >= dropMin.x && px.x <= dropMax.x && px.y >= dropMin.y && px.y <= dropMax.y) {
-            finalColor = float3(0.14f, 0.15f, 0.20f);
+            finalColor = uiSurface;
             float inDropY = px.y - dropMin.y;
             int itemIdx = int(inDropY / 28.0f);
             if (frac(inDropY / 28.0f) < 0.95f && itemIdx < 4) finalColor = float3(0.20f, 0.23f, 0.32f);
 
-            if (itemIdx == 0 && Str9(px, float2(dropMin.x + 14.0f, dropMin.y + 7.0f), 'N', 'E', 'W', ' ', 'S', 'C', 'E', 'N', 'E', 1.0f)) finalColor = float3(1, 1, 1);
-            if (itemIdx == 1 && Str10(px, float2(dropMin.x + 14.0f, dropMin.y + 35.0f), 'O', 'P', 'E', 'N', ' ', 'S', 'C', 'E', 'N', 'E', 1.0f)) finalColor = float3(1, 1, 1);
-            if (itemIdx == 2 && Str10(px, float2(dropMin.x + 14.0f, dropMin.y + 63.0f), 'S', 'A', 'V', 'E', ' ', 'S', 'C', 'E', 'N', 'E', 1.0f)) finalColor = float3(1, 1, 1);
-            if (itemIdx == 3 && Str4(px, float2(dropMin.x + 14.0f, dropMin.y + 91.0f), 'E', 'X', 'I', 'T', 1.0f)) finalColor = float3(1.0f, 0.4f, 0.4f);
+            if ((min(((itemIdx == 0) ? 1.0f : 0.0f), Str9Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 7.0f), 'N', 'e', 'w', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((itemIdx == 0) ? 1.0f : 0.0f), Str9Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 7.0f), 'N', 'e', 'w', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f)));
+            if ((min(((itemIdx == 1) ? 1.0f : 0.0f), Str10Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 35.0f), 'O', 'p', 'e', 'n', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((itemIdx == 1) ? 1.0f : 0.0f), Str10Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 35.0f), 'O', 'p', 'e', 'n', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f)));
+            if ((min(((itemIdx == 2) ? 1.0f : 0.0f), Str10Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 63.0f), 'S', 'a', 'v', 'e', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((itemIdx == 2) ? 1.0f : 0.0f), Str10Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 63.0f), 'S', 'a', 'v', 'e', ' ', 'S', 'c', 'e', 'n', 'e', 1.0f)));
+            if ((min(((itemIdx == 3) ? 1.0f : 0.0f), Str4Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 91.0f), 'E', 'x', 'i', 't', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1.0f, 0.4f, 0.4f), min(((itemIdx == 3) ? 1.0f : 0.0f), Str4Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 91.0f), 'E', 'x', 'i', 't', 1.0f)));
         }
     } else if (activeMenu == 2) { // EDIT
         float2 dropMin = float2(130.0f, 32.0f);
@@ -1053,10 +1176,10 @@ float4 PSMain(VSOutput input) : SV_Target {
         if (px.x >= dropMin.x && px.x <= dropMax.x && px.y >= dropMin.y && px.y <= dropMax.y) {
             float inDropY = px.y - dropMin.y;
             int itemIdx = (int)(inDropY / 28.0f);
-            finalColor = frac(inDropY / 28.0f) < 0.95f ? float3(0.19f, 0.22f, 0.31f) : float3(0.14f, 0.15f, 0.20f);
-            if (itemIdx == 0 && Str4(px, dropMin + float2(14.0f, 7.0f), 'U', 'N', 'D', 'O', 1.0f)) finalColor = float3(1, 1, 1);
-            if (itemIdx == 1 && Str4(px, dropMin + float2(14.0f, 35.0f), 'R', 'E', 'D', 'O', 1.0f)) finalColor = float3(1, 1, 1);
-            if (itemIdx == 2 && Str6(px, dropMin + float2(14.0f, 63.0f), 'D', 'E', 'L', 'E', 'T', 'E', 1.0f)) finalColor = float3(1.0f, 0.62f, 0.62f);
+            finalColor = frac(inDropY / 28.0f) < 0.95f ? uiPanelHeader : uiSurface;
+            if ((min(((itemIdx == 0) ? 1.0f : 0.0f), Str4Coverage(px, dropMin + float2(14.0f, 7.0f), 'U', 'n', 'd', 'o', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((itemIdx == 0) ? 1.0f : 0.0f), Str4Coverage(px, dropMin + float2(14.0f, 7.0f), 'U', 'n', 'd', 'o', 1.0f)));
+            if ((min(((itemIdx == 1) ? 1.0f : 0.0f), Str4Coverage(px, dropMin + float2(14.0f, 35.0f), 'R', 'e', 'd', 'o', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((itemIdx == 1) ? 1.0f : 0.0f), Str4Coverage(px, dropMin + float2(14.0f, 35.0f), 'R', 'e', 'd', 'o', 1.0f)));
+            if ((min(((itemIdx == 2) ? 1.0f : 0.0f), Str6Coverage(px, dropMin + float2(14.0f, 63.0f), 'D', 'e', 'l', 'e', 't', 'e', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1.0f, 0.62f, 0.62f), min(((itemIdx == 2) ? 1.0f : 0.0f), Str6Coverage(px, dropMin + float2(14.0f, 63.0f), 'D', 'e', 'l', 'e', 't', 'e', 1.0f)));
         }
     } else if (activeMenu == 3) { // SCENE
         float2 dropMin = float2(180.0f, 32.0f);
@@ -1064,17 +1187,17 @@ float4 PSMain(VSOutput input) : SV_Target {
         if (px.x >= dropMin.x && px.x <= dropMax.x && px.y >= dropMin.y && px.y <= dropMax.y) {
             float inDropY = px.y - dropMin.y;
             int itemIdx = (int)(inDropY / 28.0f);
-            finalColor = frac(inDropY / 28.0f) < 0.95f ? float3(0.19f, 0.22f, 0.31f) : float3(0.14f, 0.15f, 0.20f);
-            if (itemIdx == 0 && Str8(px, dropMin + float2(14.0f, 7.0f), 'A', 'D', 'D', ' ', 'C', 'U', 'B', 'E', 1.0f)) finalColor = float3(1, 1, 1);
-            if (itemIdx == 1 && Str10(px, dropMin + float2(14.0f, 35.0f), 'A', 'D', 'D', ' ', 'S', 'P', 'H', 'E', 'R', 'E', 1.0f)) finalColor = float3(1, 1, 1);
-            if (itemIdx == 2 && Str10(px, dropMin + float2(14.0f, 63.0f), 'A', 'D', 'D', ' ', 'C', 'Y', 'L', 'I', 'N', 'D', 1.0f)) finalColor = float3(1, 1, 1);
+            finalColor = frac(inDropY / 28.0f) < 0.95f ? uiPanelHeader : uiSurface;
+            if ((min(((itemIdx == 0) ? 1.0f : 0.0f), Str8Coverage(px, dropMin + float2(14.0f, 7.0f), 'A', 'd', 'd', ' ', 'C', 'u', 'b', 'e', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((itemIdx == 0) ? 1.0f : 0.0f), Str8Coverage(px, dropMin + float2(14.0f, 7.0f), 'A', 'd', 'd', ' ', 'C', 'u', 'b', 'e', 1.0f)));
+            if ((min(((itemIdx == 1) ? 1.0f : 0.0f), Str10Coverage(px, dropMin + float2(14.0f, 35.0f), 'A', 'd', 'd', ' ', 'S', 'p', 'h', 'e', 'r', 'e', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((itemIdx == 1) ? 1.0f : 0.0f), Str10Coverage(px, dropMin + float2(14.0f, 35.0f), 'A', 'd', 'd', ' ', 'S', 'p', 'h', 'e', 'r', 'e', 1.0f)));
+            if ((min(((itemIdx == 2) ? 1.0f : 0.0f), Str10Coverage(px, dropMin + float2(14.0f, 63.0f), 'A', 'd', 'd', ' ', 'C', 'y', 'l', 'i', 'n', 'd', 1.0f))) > 0.0f) finalColor = lerp(finalColor, float3(1, 1, 1), min(((itemIdx == 2) ? 1.0f : 0.0f), Str10Coverage(px, dropMin + float2(14.0f, 63.0f), 'A', 'd', 'd', ' ', 'C', 'y', 'l', 'i', 'n', 'd', 1.0f)));
         }
     } else if (activeMenu == 4) { // BUILD
         float2 dropMin = float2(240.0f, 32.0f);
         float2 dropMax = float2(420.0f, 32.0f + 28.0f);
         if (px.x >= dropMin.x && px.x <= dropMax.x && px.y >= dropMin.y && px.y <= dropMax.y) {
-            finalColor = IsHovered(px, dropMin, dropMax) ? float3(0.20f, 0.25f, 0.34f) : float3(0.14f, 0.15f, 0.20f);
-            if (Str8(px, float2(dropMin.x + 14.0f, dropMin.y + 7.0f), 'P', 'A', 'C', 'K', 'A', 'G', 'E', 1.0f)) finalColor = float3(0.64f, 0.91f, 0.72f);
+            finalColor = IsHovered(px, dropMin, dropMax) ? float3(0.20f, 0.25f, 0.34f) : uiSurface;
+            if ((Str8Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 7.0f), 'P', 'a', 'c', 'k', 'a', 'g', 'e', 1.0f)) > 0.0f) finalColor = lerp(finalColor, float3(0.64f, 0.91f, 0.72f), Str8Coverage(px, float2(dropMin.x + 14.0f, dropMin.y + 7.0f), 'P', 'a', 'c', 'k', 'a', 'g', 'e', 1.0f));
         }
     }
 

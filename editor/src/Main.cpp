@@ -1016,12 +1016,12 @@ int main(int argc, char* argv[]) {
 
                     if (selectedEntity >= 0 && selectedEntity < static_cast<int>(sceneEntities.size())) {
                         auto& ent = sceneEntities[selectedEntity];
-                        const int transformRow = static_cast<int>((mouseY - 140.0f) / 26.0f);
-                        const float rowY = 142.0f + static_cast<float>(transformRow) * 26.0f;
-                        const bool rowHit = transformRow >= 0 && transformRow <= 4 && mouseY >= rowY - 2.0f && mouseY <= rowY + 16.0f;
+                        const int transformRow = static_cast<int>((mouseY - 140.0f) / 28.0f);
+                        const float rowY = 142.0f + static_cast<float>(transformRow) * 28.0f;
+                        const bool rowHit = transformRow >= 0 && transformRow <= 4 && mouseY >= rowY - 2.0f && mouseY <= rowY + 20.0f;
                         if (rowHit) {
-                            const bool decrement = mouseX >= rightDockX + 80.0f && mouseX <= rightDockX + 105.0f;
-                            const bool increment = mouseX >= rightDockX + 232.0f && mouseX <= rightDockX + 257.0f;
+                            const bool decrement = mouseX >= rightDockX + 107.0f && mouseX <= rightDockX + 132.0f;
+                            const bool increment = mouseX >= rightDockX + 275.0f && mouseX <= rightDockX + 300.0f;
                             if (decrement || increment) {
                                 pushUndoSnapshot();
                                 const float amount = increment ? 0.25f : -0.25f;
