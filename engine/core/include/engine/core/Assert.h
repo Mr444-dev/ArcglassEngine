@@ -22,7 +22,7 @@ void ReportAssertionFailure(
 
 } // namespace Engine::Core
 
-#if defined(_DEBUG) || !defined(NDEBUG)
+#if defined(_DEBUG) || !defined(NDEBUG) || defined(ENGINE_ENABLE_ASSERTS)
     #define ENGINE_ASSERT(expression, message) \
         do { \
             if (!(expression)) { \

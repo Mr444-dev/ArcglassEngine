@@ -1,4 +1,4 @@
-﻿#include "engine/core/BaseTypes.h"
+#include "engine/core/BaseTypes.h"
 #include "engine/core/Log.h"
 #include "engine/core/Profiler.h"
 #include "engine/core/Allocators.h"
@@ -8,7 +8,6 @@
 #include "engine/platform/Input.h"
 #include "engine/rhi/RHI.h"
 #include "engine/rhi/RHIDevice.h"
-#include "engine/rhi/RHIShaderCompiler.h"
 #include "engine/renderer/Camera.h"
 #include "engine/renderer/RenderGraph.h"
 #include "engine/renderer/MaterialSystem.h"
@@ -23,11 +22,39 @@
 #include <chrono>
 #include <cmath>
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <vector>
+
+namespace {
+bool LoadShaderBytecode(const std::filesystem::path& path, std::vector<Engine::Core::u8>& outBytecode) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        ENGINE_LOG_ERROR("Failed to open precompiled runtime shader: {}", path.string());
+        return false;
+    }
+
+    const std::streamsize size = file.tellg();
+    if (size <= 0) {
+        ENGINE_LOG_ERROR("Precompiled runtime shader is empty: {}", path.string());
+        return false;
+    }
+
+    outBytecode.resize(static_cast<size_t>(size));
+    file.seekg(0, std::ios::beg);
+    if (!file.read(reinterpret_cast<char*>(outBytecode.data()), size)) {
+        ENGINE_LOG_ERROR("Failed to read precompiled runtime shader: {}", path.string());
+        outBytecode.clear();
+        return false;
+    }
+
+    return true;
+}
+} // namespace
 
 int main(int argc, char* argv[]) {
     (void)argc;
-    (void)argv;
 
     using namespace Engine;
     using namespace Engine::RHI;
@@ -35,7 +62,7 @@ int main(int argc, char* argv[]) {
     using namespace Engine::Core;
 
     Logger::LogMessage(LogLevel::Info, "=========================================================");
-    Logger::LogMessage(LogLevel::Info, "   Modern 3D Game Engine (Standard 2026) - Tech Demo   ");
+    Logger::LogMessage(LogLevel::Info, "   Arcglass Runtime       ");
     Logger::LogMessage(LogLevel::Info, "=========================================================");
 
     // 1. Core Systems Startup
@@ -46,7 +73,7 @@ int main(int argc, char* argv[]) {
     Platform::Initialize();
     Platform::Window window;
     Platform::WindowDesc winDesc{};
-    winDesc.title = "Modern 3D Game Engine (2026) | Initializing...";
+    winDesc.title = "Arcglass Runtime | Initializing...";
     winDesc.width = 1280;
     winDesc.height = 720;
     ENGINE_VERIFY(window.Initialize(winDesc), "Failed to initialize game window");
@@ -86,18 +113,37 @@ int main(int argc, char* argv[]) {
     camera.SetLens(0.785398f, static_cast<float>(winDesc.width) / static_cast<float>(winDesc.height), 0.1f, 1000.0f);
     camera.UpdateMatrices();
 
+    window.SetResizeCallback([&](u32 width, u32 height) {
+        device.WaitForGPU();
+        swapChain->Resize(width, height);
+        winDesc.width = width;
+        winDesc.height = height;
+        camera.SetLens(0.785398f, static_cast<float>(width) / static_cast<float>(height), 0.1f, 1000.0f);
+        camera.UpdateMatrices();
+    });
+
+    // Load the scene shaders compiled as part of the CMake build.
+    window.SetTitle("Arcglass Runtime | Loading shaders...");
+    std::vector<u8> vsBytecode;
+    std::vector<u8> psBytecode;
+    const auto executableDirectory = std::filesystem::absolute(argv[0]).parent_path();
+    const auto shaderDirectory = executableDirectory / "shaders" / "runtime";
+    const bool vsOk = LoadShaderBytecode(shaderDirectory / "RuntimeScene.vs_5_1.cso", vsBytecode);
+    const bool psOk = LoadShaderBytecode(shaderDirectory / "RuntimeScene.ps_5_1.cso", psBytecode);
+    if (!vsOk || !psOk) {
+        ENGINE_LOG_ERROR("Failed to load runtime shader bytecode. Rebuild GameRuntime with CMake.");
+        device.Shutdown();
+        Platform::Shutdown();
+        JobSystem::Get().Shutdown();
+        Profiler::Shutdown();
+        return 1;
+    }
+
     MaterialSystem materialSystem;
     ENGINE_VERIFY(materialSystem.Initialize(), "Failed to initialize MaterialSystem");
 
     DebugRenderer debugRenderer;
     ENGINE_VERIFY(debugRenderer.Initialize(), "Failed to initialize DebugRenderer");
-
-    // Compile Interactive 3D Runtime Scene Shaders
-    std::vector<u8> vsBytecode;
-    std::vector<u8> psBytecode;
-    bool vsOk = RHIShaderCompiler::CompileFromFile("shaders/geometry/RuntimeScene.hlsl", "VSMain", "vs_5_1", vsBytecode);
-    bool psOk = RHIShaderCompiler::CompileFromFile("shaders/geometry/RuntimeScene.hlsl", "PSMain", "ps_5_1", psBytecode);
-    ENGINE_VERIFY(vsOk && psOk, "Failed to compile Runtime Scene shaders");
 
     GraphicsPipelineDesc scenePsoDesc{};
     scenePsoDesc.vertexShaderBytecode = vsBytecode.data();
@@ -129,8 +175,14 @@ int main(int argc, char* argv[]) {
     Core::u32 fpsFrameCount = 0;
     Core::u64 frameIndex = 0;
 
-    while (window.PollEvents()) {
+    while (true) {
         Platform::Input::Get().BeginFrame();
+        if (!window.PollEvents()) break;
+        Platform::Input::Get().EndFrame();
+        if (window.IsMinimized()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            continue;
+        }
         frameAlloc.BeginFrame();
 
         if (Platform::Input::Get().IsKeyDown(Platform::KeyCode::Escape)) {
@@ -220,7 +272,7 @@ int main(int argc, char* argv[]) {
 
             char titleBuffer[256];
             snprintf(titleBuffer, sizeof(titleBuffer),
-                "Modern 3D Game Engine (Standard 2026) | %.0f FPS (%.2f ms) | Cam: [%.1f, %.1f, %.1f] | Active Passes: %zu",
+                "Arcglass Runtime | %.0f FPS (%.2f ms) | Cam: [%.1f, %.1f, %.1f] | Active Passes: %zu",
                 fps, ms, camPos.x, camPos.y, camPos.z, renderGraph.GetCompiledPassCount());
             window.SetTitle(titleBuffer);
 

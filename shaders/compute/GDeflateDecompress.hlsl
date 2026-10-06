@@ -1,3 +1,5 @@
+// Experimental scaffold only. The engine does not compile or dispatch this file.
+// It is not a valid GDeflate decoder and must not be presented as one.
 // DirectStorage GDeflate GPU Decompression Compute Shader (SM 6.6)
 #define GDEFLATE_GROUP_SIZE 64
 

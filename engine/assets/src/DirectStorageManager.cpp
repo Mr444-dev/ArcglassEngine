@@ -16,7 +16,7 @@ bool DirectStorageManager::Initialize(Core::u32 queueCapacity) noexcept {
     }
 
     m_queueCapacity = std::max(16u, queueCapacity);
-    m_supportsGDeflate = true; // Modern DStorage 1.2+ hardware GDeflate support
+    m_supportsGDeflate = false;
     m_enqueuedRequests.reserve(m_queueCapacity);
     m_inFlightRequests.reserve(m_queueCapacity);
 
@@ -26,7 +26,7 @@ bool DirectStorageManager::Initialize(Core::u32 queueCapacity) noexcept {
     m_stats = {};
 
     m_initialized = true;
-    ENGINE_LOG_INFO("DirectStorage 1.2 Manager initialized (Queue Capacity: {}, GDeflate GPU Decompression: ENABLED).", m_queueCapacity);
+    ENGINE_LOG_INFO("DirectStorage queue simulation initialized (capacity: {}; native backend: unavailable).", m_queueCapacity);
     return true;
 }
 
@@ -65,6 +65,11 @@ Core::u64 DirectStorageManager::EnqueueRequest(const DSRequest& request) {
         return 0;
     }
 
+    if (request.compressionFormat == DSCompressionFormat::GDeflate && !m_supportsGDeflate) {
+        ENGINE_LOG_ERROR("DirectStorageManager::EnqueueRequest: GDeflate requires a native DirectStorage backend; '{}' was rejected.", request.sourcePath);
+        return 0;
+    }
+
     if (m_enqueuedRequests.size() >= m_queueCapacity) {
         ENGINE_LOG_WARN("DirectStorageManager::EnqueueRequest: Queue capacity reached ({}/{}). Automatic queue submission triggered.",
             static_cast<Core::u32>(m_enqueuedRequests.size()), m_queueCapacity);
@@ -92,14 +97,13 @@ Core::u64 DirectStorageManager::SubmitQueue() {
 
     for (auto& req : m_enqueuedRequests) {
         req.status = DSRequestStatus::InFlight;
-        m_stats.totalBytesRead += req.sourceSize;
-        m_stats.totalBytesDecompressed += req.uncompressedSize;
         m_inFlightRequests.push_back(req);
     }
 
     m_stats.totalRequestsSubmitted += batchSize;
+    m_stats.totalBatchesSubmitted++;
     m_inFlightCount = static_cast<Core::u32>(m_inFlightRequests.size());
-    m_stats.inFlightBatches++;
+    m_stats.inFlightRequests = m_inFlightCount;
 
     m_enqueuedRequests.clear();
     return m_currentFenceValue;
@@ -117,6 +121,7 @@ void DirectStorageManager::WaitForFence(Core::u64 fenceValue) {
     m_completedFenceValue = std::max(m_completedFenceValue, fenceValue);
     m_inFlightRequests.clear();
     m_inFlightCount = 0;
+    m_stats.inFlightRequests = 0;
 }
 
 void DirectStorageManager::PollCompletions() {
@@ -124,7 +129,7 @@ void DirectStorageManager::PollCompletions() {
         return;
     }
 
-    // DirectStorage asynchronous completion simulation: all in-flight requests marked completed
+    // This is a queue-lifecycle simulation; no GPU or storage operation is running.
     WaitForFence(m_currentFenceValue);
 }
 

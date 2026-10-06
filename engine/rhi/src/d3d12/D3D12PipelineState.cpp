@@ -8,11 +8,11 @@ D3D12PipelineState::D3D12PipelineState(ID3D12Device* device, const GraphicsPipel
     // 1. Create a modern bindless Root Signature with push constants
     D3D12_ROOT_PARAMETER rootParameters[1]{};
     
-    // Parameter 0: 32-bit push constants (e.g., 8 constants = 32 bytes)
+    // Parameter 0: maximum D3D12 root constants, shared by renderer and editor shaders.
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
     rootParameters[0].Constants.ShaderRegister = 0;
     rootParameters[0].Constants.RegisterSpace = 0;
-    rootParameters[0].Constants.Num32BitValues = 48;
+    rootParameters[0].Constants.Num32BitValues = 64;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
     D3D12_ROOT_SIGNATURE_DESC rsDesc{};

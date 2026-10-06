@@ -36,12 +36,12 @@ struct DSRequest {
 
 struct DirectStorageStats {
     Core::u64 totalRequestsSubmitted{0};
-    Core::u64 totalBytesRead{0};
-    Core::u64 totalBytesDecompressed{0};
-    Core::u32 inFlightBatches{0};
-    float lastBatchBandwidthGBs{0.0f};
+    Core::u32 totalBatchesSubmitted{0};
+    Core::u32 inFlightRequests{0};
 };
 
+// CPU-side queue-lifecycle prototype only. This class does not call the
+// DirectStorage API, read source files, decompress GDeflate, or write to VRAM.
 class DirectStorageManager {
 public:
     DirectStorageManager() = default;
@@ -57,21 +57,22 @@ public:
     [[nodiscard]] Core::u64 GetCompletedFenceValue() const noexcept { return m_completedFenceValue; }
     [[nodiscard]] const DirectStorageStats& GetStats() const noexcept { return m_stats; }
 
-    // Enqueues an uncompressed or GDeflate-compressed streaming request directly into memory/VRAM
+    // Enqueues an uncompressed request record for queue-lifecycle testing.
+    // GDeflate requests are rejected until a native DirectStorage backend exists.
     [[nodiscard]] Core::u64 EnqueueRequest(const DSRequest& request);
 
-    // Submits all currently enqueued requests to the hardware NVMe queue and advances the completion fence
+    // Moves queued request records into the simulated in-flight state.
     [[nodiscard]] Core::u64 SubmitQueue();
 
-    // Synchronizes until the specified fence value has completed execution
+    // Immediately completes simulated work through the requested fence value.
     void WaitForFence(Core::u64 fenceValue);
 
-    // Simulates or handles asynchronous completion of in-flight batch
+    // Completes the current simulated in-flight batch.
     void PollCompletions();
 
 private:
     bool m_initialized{false};
-    bool m_supportsGDeflate{true};
+    bool m_supportsGDeflate{false};
     Core::u32 m_queueCapacity{128};
     Core::u32 m_inFlightCount{0};
     Core::u64 m_nextRequestId{1};

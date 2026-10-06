@@ -4,8 +4,8 @@ metadata:
   name: engine-server-config
   namespace: game-servers
   labels:
-    app.kubernetes.io/name: mygameengine-server
-    app.kubernetes.io/part-of: mygameengine
+    app.kubernetes.io/name: arcglass-engine-server
+    app.kubernetes.io/part-of: arcglass-engine
 data:
   server.json: |
     {

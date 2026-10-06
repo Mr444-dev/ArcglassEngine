@@ -2,10 +2,10 @@
 set -euo pipefail
 
 IMAGE_TAG="${1:-latest}"
-IMAGE_NAME="mygameengine/dedicated-server:${IMAGE_TAG}"
+IMAGE_NAME="arcglass-engine/dedicated-server:${IMAGE_TAG}"
 
 echo "=========================================================="
-echo "  Building Production Dedicated Server Docker Container   "
+echo "  Building Experimental Arcglass server image scaffold   "
 echo "  Target: ${IMAGE_NAME}                                   "
 echo "=========================================================="
 

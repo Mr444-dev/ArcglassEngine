@@ -1,16 +1,20 @@
-﻿cmake_minimum_required(VERSION 3.28)
-project(MyGameEngine 
+cmake_minimum_required(VERSION 3.28)
+project(ArcglassEngine
     VERSION 0.1.0 
     LANGUAGES C CXX
 )
 
+if(WIN32)
+    enable_language(RC)
+    configure_file(engine/platform/resources/Arcglass.rc.in ${CMAKE_CURRENT_BINARY_DIR}/ArcglassResources.rc @ONLY)
+endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Global Options
-option(BUILD_EDITOR "Build Engine Editor with Dear ImGui" ON)
+option(BUILD_EDITOR "Build the Arcglass custom editor" ON)
 option(BUILD_TESTS "Build Engine Unit Tests" ON)
 option(ENABLE_TRACY "Enable Tracy Profiler Instrumentation" OFF)
 option(ENABLE_LTO "Enable Link-Time Optimization (LTO/LTCG)" OFF)
@@ -29,6 +33,7 @@ endif()
 # Include custom cmake modules
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
+include(EngineShaders)
 
 # Output directories
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")

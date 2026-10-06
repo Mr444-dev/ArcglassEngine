@@ -2,6 +2,7 @@ function(target_set_compiler_warnings target_name)
     if(MSVC)
         target_compile_options(${target_name} PRIVATE
             /W4
+            /EHsc
             /permissive-
             /w14242
             /w14254

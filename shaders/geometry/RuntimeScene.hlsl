@@ -39,97 +39,107 @@ VSOutput VSMain(uint vertexID : SV_VertexID) {
 
 // 4x6 Pixel Embedded Bitmap Font Glyphs
 uint GetGlyph(uint c) {
-    if (c == 'A') return 0x999F96;
-    if (c == 'B') return 0xE99E9E;
-    if (c == 'C') return 0x788887;
-    if (c == 'D') return 0xE9999E;
-    if (c == 'E') return 0xF88E8F;
-    if (c == 'F') return 0x888E8F;
-    if (c == 'G') return 0x799B87;
-    if (c == 'H') return 0x999F99;
-    if (c == 'I') return 0xE4444E;
-    if (c == 'J') return 0x699111;
-    if (c == 'K') return 0x9ACCAC;
-    if (c == 'L') return 0xF88888;
-    if (c == 'M') return 0x9999F9;
-    if (c == 'N') return 0x999BD9;
-    if (c == 'O') return 0x699996;
-    if (c == 'P') return 0x888E9E;
-    if (c == 'R') return 0x99AE9E;
-    if (c == 'S') return 0x691687;
-    if (c == 'T') return 0x66666F;
-    if (c == 'U') return 0x699999;
-    if (c == 'V') return 0x669999;
-    if (c == 'W') return 0x9F9999;
-    if (c == 'X') return 0x966669;
-    if (c == 'Y') return 0x666699;
-    if (c == 'Z') return 0xF8421F;
-    if (c == '0') return 0x699996;
-    if (c == '1') return 0xE44464;
-    if (c == '2') return 0xF8421F;
-    if (c == '3') return 0xE1161F;
-    if (c == '4') return 0x11F999;
-    if (c == '5') return 0xF11E8F;
-    if (c == '6') return 0x699E86;
-    if (c == '7') return 0x22211F;
-    if (c == '8') return 0x699696;
-    if (c == '9') return 0x611F96;
-    if (c == ':') return 0x060600;
-    if (c == '/') return 0x124880;
-    if (c == '!') return 0x404444;
-    return 0x000000;
+    uint glyph = 0u;
+    switch (c) {
+        case 'A': glyph = 0x999F96u; break;
+        case 'B': glyph = 0xE99E9Eu; break;
+        case 'C': glyph = 0x788887u; break;
+        case 'D': glyph = 0xE9999Eu; break;
+        case 'E': glyph = 0xF88E8Fu; break;
+        case 'F': glyph = 0x888E8Fu; break;
+        case 'G': glyph = 0x799B87u; break;
+        case 'H': glyph = 0x999F99u; break;
+        case 'I': glyph = 0xE4444Eu; break;
+        case 'J': glyph = 0x699111u; break;
+        case 'K': glyph = 0x9ACCACu; break;
+        case 'L': glyph = 0xF88888u; break;
+        case 'M': glyph = 0x9999F9u; break;
+        case 'N': glyph = 0x999BD9u; break;
+        case 'O': glyph = 0x699996u; break;
+        case 'P': glyph = 0x888E9Eu; break;
+        case 'R': glyph = 0x99AE9Eu; break;
+        case 'S': glyph = 0x691687u; break;
+        case 'T': glyph = 0x66666Fu; break;
+        case 'U': glyph = 0x699999u; break;
+        case 'V': glyph = 0x669999u; break;
+        case 'W': glyph = 0x9F9999u; break;
+        case 'X': glyph = 0x966669u; break;
+        case 'Y': glyph = 0x666699u; break;
+        case 'Z': glyph = 0xF8421Fu; break;
+        case '0': glyph = 0x699996u; break;
+        case '1': glyph = 0xE44464u; break;
+        case '2': glyph = 0xF8421Fu; break;
+        case '3': glyph = 0xE1161Fu; break;
+        case '4': glyph = 0x11F999u; break;
+        case '5': glyph = 0xF11E8Fu; break;
+        case '6': glyph = 0x699E86u; break;
+        case '7': glyph = 0x22211Fu; break;
+        case '8': glyph = 0x699696u; break;
+        case '9': glyph = 0x611F96u; break;
+        case ':': glyph = 0x060600u; break;
+        case '/': glyph = 0x124880u; break;
+        case '!': glyph = 0x404444u; break;
+        default: break;
+    }
+    return glyph;
 }
 
 bool IsChar(float2 px, float2 pos, uint c, float scale) {
-    float2 rel = (px - pos) / scale;
-    if (rel.x < 0.0f || rel.x >= 4.0f || rel.y < 0.0f || rel.y >= 6.0f) return false;
-    uint x = 3 - uint(rel.x); // Fixed: read MSB to LSB
-    uint y = uint(rel.y);
+    float2 rel = (px - pos) / max(scale, 1e-6f);
+    bool inBounds = scale > 0.0f && rel.x >= 0.0f && rel.x < 4.0f && rel.y >= 0.0f && rel.y < 6.0f;
+    float2 safeRel = clamp(rel, float2(0.0f, 0.0f), float2(3.999f, 5.999f));
+    uint x = 3u - uint(safeRel.x);
+    uint y = uint(safeRel.y);
     uint glyph = GetGlyph(c);
-    return ((glyph >> (y * 4 + x)) & 1) != 0;
+    return inBounds && ((glyph >> (y * 4u + x)) & 1u) != 0u;
 }
 
 bool Str4(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, float scale = 2.0f) {
     float w = 5.0f * scale;
-    if (IsChar(px, pos + float2(0.0f * w, 0.0f), c0, scale)) return true;
-    if (IsChar(px, pos + float2(1.0f * w, 0.0f), c1, scale)) return true;
-    if (IsChar(px, pos + float2(2.0f * w, 0.0f), c2, scale)) return true;
-    if (IsChar(px, pos + float2(3.0f * w, 0.0f), c3, scale)) return true;
-    return false;
+    return IsChar(px, pos, c0, scale)
+        || IsChar(px, pos + float2(w, 0.0f), c1, scale)
+        || IsChar(px, pos + float2(2.0f * w, 0.0f), c2, scale)
+        || IsChar(px, pos + float2(3.0f * w, 0.0f), c3, scale);
 }
 
 bool Str5(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, float scale = 2.0f) {
     float w = 5.0f * scale;
-    if (Str4(px, pos, c0, c1, c2, c3, scale)) return true;
-    if (IsChar(px, pos + float2(4.0f * w, 0.0f), c4, scale)) return true;
-    return false;
+    return Str4(px, pos, c0, c1, c2, c3, scale)
+        || IsChar(px, pos + float2(4.0f * w, 0.0f), c4, scale);
 }
 
 bool Str6(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, float scale = 2.0f) {
     float w = 5.0f * scale;
-    if (Str4(px, pos, c0, c1, c2, c3, scale)) return true;
-    if (IsChar(px, pos + float2(4.0f * w, 0.0f), c4, scale)) return true;
-    if (IsChar(px, pos + float2(5.0f * w, 0.0f), c5, scale)) return true;
-    return false;
+    return Str4(px, pos, c0, c1, c2, c3, scale)
+        || IsChar(px, pos + float2(4.0f * w, 0.0f), c4, scale)
+        || IsChar(px, pos + float2(5.0f * w, 0.0f), c5, scale);
 }
 
 bool Str7(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, float scale = 2.0f) {
     float w = 5.0f * scale;
-    if (Str6(px, pos, c0, c1, c2, c3, c4, c5, scale)) return true;
-    if (IsChar(px, pos + float2(6.0f * w, 0.0f), c6, scale)) return true;
-    return false;
+    return Str6(px, pos, c0, c1, c2, c3, c4, c5, scale)
+        || IsChar(px, pos + float2(6.0f * w, 0.0f), c6, scale);
 }
 
 bool Str8(float2 px, float2 pos, uint c0, uint c1, uint c2, uint c3, uint c4, uint c5, uint c6, uint c7, float scale = 2.0f) {
     float w = 5.0f * scale;
-    if (Str7(px, pos, c0, c1, c2, c3, c4, c5, c6, scale)) return true;
-    if (IsChar(px, pos + float2(7.0f * w, 0.0f), c7, scale)) return true;
-    return false;
+    return Str7(px, pos, c0, c1, c2, c3, c4, c5, c6, scale)
+        || IsChar(px, pos + float2(7.0f * w, 0.0f), c7, scale);
 }
 
 // Ray-box intersection helper
-bool RayBoxIntersect(float3 ro, float3 rd, float3 boxMin, float3 boxMax, out float tNear, out float3 normal) {
-    float3 invD = 1.0f / rd;
+bool RayBoxIntersect(float3 ro, float3 rd, float3 boxMin, float3 boxMax, inout float tNear, inout float3 normal) {
+    tNear = 1e9;
+    normal = float3(0.0f, 1.0f, 0.0f);
+    bool hit = false;
+    float hitT = 1e9;
+    float3 hitNormal = float3(0.0f, 1.0f, 0.0f);
+
+    float3 safeRd = float3(
+        abs(rd.x) < 1e-6f ? (rd.x < 0.0f ? -1e-6f : 1e-6f) : rd.x,
+        abs(rd.y) < 1e-6f ? (rd.y < 0.0f ? -1e-6f : 1e-6f) : rd.y,
+        abs(rd.z) < 1e-6f ? (rd.z < 0.0f ? -1e-6f : 1e-6f) : rd.z);
+    float3 invD = 1.0f / safeRd;
     float3 t0 = (boxMin - ro) * invD;
     float3 t1 = (boxMax - ro) * invD;
     float3 tMin = min(t0, t1);
@@ -139,37 +149,47 @@ bool RayBoxIntersect(float3 ro, float3 rd, float3 boxMin, float3 boxMax, out flo
     float tExit  = min(min(tMax.x, tMax.y), tMax.z);
 
     if (tEnter <= tExit && tExit > 0.0f) {
-        tNear = tEnter > 0.0f ? tEnter : tExit;
-        float3 hitPoint = ro + rd * tNear;
+        hitT = tEnter > 0.0f ? tEnter : tExit;
+        float3 hitPoint = ro + rd * hitT;
         float3 center = (boxMin + boxMax) * 0.5f;
         float3 size = (boxMax - boxMin) * 0.5f;
         float3 d = (hitPoint - center) / size;
         float3 absD = abs(d);
-        if (absD.x > absD.y && absD.x > absD.z) normal = float3(sign(d.x), 0.0f, 0.0f);
-        else if (absD.y > absD.z) normal = float3(0.0f, sign(d.y), 0.0f);
-        else normal = float3(0.0f, 0.0f, sign(d.z));
-        return true;
+        if (absD.x > absD.y && absD.x > absD.z) hitNormal = float3(sign(d.x), 0.0f, 0.0f);
+        else if (absD.y > absD.z) hitNormal = float3(0.0f, sign(d.y), 0.0f);
+        else hitNormal = float3(0.0f, 0.0f, sign(d.z));
+        hit = true;
     }
-    tNear = 1e9;
-    normal = float3(0.0f, 1.0f, 0.0f);
-    return false;
+
+    if (hit) {
+        tNear = hitT;
+        normal = hitNormal;
+    }
+    return hit;
 }
 
 // Ray-Sphere intersection helper
-bool RaySphereIntersect(float3 ro, float3 rd, float3 center, float radius, out float tNear) {
+bool RaySphereIntersect(float3 ro, float3 rd, float3 center, float radius, inout float tNear) {
+    tNear = 1e9;
+    bool hit = false;
+
     float3 oc = ro - center;
     float b = dot(oc, rd);
     float c = dot(oc, oc) - radius * radius;
     float h = b * b - c;
-    if (h < 0.0f) {
-        tNear = 1e9;
-        return false;
+    if (h >= 0.0f) {
+        h = sqrt(h);
+        float candidateT = -b - h;
+        if (candidateT < 0.0f) candidateT = -b + h;
+        if (candidateT > 0.0f) {
+            tNear = candidateT;
+            hit = true;
+        }
     }
-    h = sqrt(h);
-    tNear = -b - h;
-    if (tNear < 0.0f) tNear = -b + h;
-    return tNear > 0.0f;
+    return hit;
 }
+
+#include "../common/ArcglassAtmosphere.hlsli"
 
 float4 PSMain(VSOutput input) : SV_Target {
     float2 px = input.position.xy;
@@ -194,15 +214,9 @@ float4 PSMain(VSOutput input) : SV_Target {
     float3 ro = float3(CamX, CamY, CamZ);
     float3 rd = normalize(uv.x * right + uv.y * up + 1.6f * forward);
 
-    // 2. Atmospheric Sky Gradient & Sun
-    float horizonFactor = clamp(rd.y * 2.5f + 0.2f, 0.0f, 1.0f);
-    float3 skyZenith = float3(0.04f, 0.06f, 0.12f);
-    float3 skyHorizon = float3(0.18f, 0.22f, 0.35f);
-    float3 sceneCol = lerp(skyHorizon, skyZenith, horizonFactor);
-
-    float3 sunDir = normalize(float3(0.5f, 0.6f, 0.4f));
-    float sunDot = max(dot(rd, sunDir), 0.0f);
-    sceneCol += float3(1.0f, 0.9f, 0.7f) * pow(sunDot, 128.0f) * 1.5f;
+    // Shared analytic sky, solar disc, and low-cost procedural cloud layer.
+    float3 sunDir = normalize(float3(0.50f, 0.60f, 0.40f));
+    float3 sceneCol = ArcSkyRadiance(ro, rd, sunDir, Time);
 
     // 3. Infinite Ground Grid
     if (rd.y < -0.001f && ro.y > 0.0f) {
@@ -226,7 +240,7 @@ float4 PSMain(VSOutput input) : SV_Target {
             gCol = lerp(gCol, majorLineCol, majorGrid * 0.8f);
 
             float fog = clamp(tGround / 100.0f, 0.0f, 1.0f);
-            sceneCol = lerp(gCol, skyHorizon, fog);
+            sceneCol = lerp(gCol, float3(0.30f, 0.43f, 0.60f), fog);
         }
     }
 

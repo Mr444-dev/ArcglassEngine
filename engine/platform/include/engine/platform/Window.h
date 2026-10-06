@@ -7,7 +7,7 @@
 namespace Engine::Platform {
 
 struct WindowDesc {
-    std::string title{"Modern 3D Game Engine (Standard 2026)"};
+    std::string title{"Arcglass Engine"};
     Core::u32 width{1280};
     Core::u32 height{720};
     bool resizable{true};

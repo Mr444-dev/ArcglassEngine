@@ -1,5 +1,6 @@
 add_executable(GameRuntime
     src/Main.cpp
+    ${CMAKE_BINARY_DIR}/ArcglassResources.rc
 )
 
 target_link_libraries(GameRuntime PRIVATE
@@ -15,3 +16,5 @@ target_link_libraries(GameRuntime PRIVATE
 )
 
 target_set_compiler_warnings(GameRuntime)
+
+engine_compile_shader_set(GameRuntime shaders/geometry/RuntimeScene.hlsl runtime)

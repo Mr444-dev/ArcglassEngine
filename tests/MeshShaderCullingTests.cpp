@@ -64,7 +64,7 @@ void TestHardwareMeshClusterCullPipeline() {
     using namespace Engine::Core;
     using namespace Engine::Renderer;
 
-    Logger::LogMessage(LogLevel::Info, "--- Testing Nanite-Style Mesh Cluster GPU Culling Pipeline ---");
+    Logger::LogMessage(LogLevel::Info, "--- Testing Mesh Cluster CPU Culling Reference ---");
 
     Camera camera;
     camera.SetPosition({0.0f, 2.0f, -10.0f});
@@ -81,7 +81,7 @@ void TestHardwareMeshClusterCullPipeline() {
 
         // Alternate half facing camera, half facing away
         const bool facesCamera = (i % 2 == 0);
-        c.normalCone.apex = {static_cast<float>(i % 8) - 4.0f, 0.0f, static_cast<float>(i / 8) * 2.0f};
+        c.normalCone.apex = {0.0f, 0.0f, 0.0f};
         c.normalCone.axis = facesCamera ? Vec3{0.0f, 0.0f, -1.0f} : Vec3{0.0f, 0.0f, 1.0f};
         c.normalCone.cutoffAngleCosine = 0.866f; // 30 deg cone
 
@@ -97,12 +97,11 @@ void TestHardwareMeshClusterCullPipeline() {
         nullptr, // No HZB for this baseline
         surviving.data()
     );
-
     // Exactly 32 clusters face camera and reside within frustum
     ENGINE_ASSERT(survivingCount == 32, "Exactly half (32) front-facing clusters must survive");
     (void)survivingCount;
 
-    ENGINE_LOG_INFO("Hardware mesh cluster pipeline culled 32 backfacing clusters in 1 pass (Surviving: 32/64).");
+    ENGINE_LOG_INFO("CPU mesh cluster culler rejected 32 back-facing clusters (Surviving: 32/64).");
 }
 
 void TestMeshClusterCullRenderGraphPass() {

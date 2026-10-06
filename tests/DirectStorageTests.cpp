@@ -8,7 +8,7 @@ void TestDirectStorageInitializationAndCaps() {
     using namespace Engine::Assets;
     using namespace Engine::Core;
 
-    Logger::LogMessage(LogLevel::Info, "--- Testing DirectStorage 1.2 Initialization & Capabilities ---");
+    Logger::LogMessage(LogLevel::Info, "--- Testing DirectStorage Queue Simulation Initialization ---");
 
     DirectStorageManager dsManager;
     ENGINE_ASSERT(!dsManager.IsInitialized(), "Must not be initialized prior to Initialize()");
@@ -18,13 +18,13 @@ void TestDirectStorageInitializationAndCaps() {
     ENGINE_ASSERT(initOk, "DirectStorageManager initialization failed");
     ENGINE_ASSERT(dsManager.IsInitialized(), "DirectStorageManager must report initialized");
     ENGINE_ASSERT(dsManager.GetQueueCapacity() == 64, "Queue capacity must match configured value");
-    ENGINE_ASSERT(dsManager.IsGDeflateSupported(), "GDeflate hardware GPU decompression must be supported");
+    ENGINE_ASSERT(!dsManager.IsGDeflateSupported(), "A queue simulator must not claim native GDeflate support");
     ENGINE_ASSERT(dsManager.GetCompletedFenceValue() == 0, "Initial completion fence must be 0");
 
     dsManager.Shutdown();
     ENGINE_ASSERT(!dsManager.IsInitialized(), "Must be uninitialized after Shutdown()");
 
-    ENGINE_LOG_INFO("DirectStorage 1.2 capabilities & initialization verified.");
+    ENGINE_LOG_INFO("Queue simulation initialized and correctly reports no native DirectStorage backend.");
 }
 
 void TestDirectStorageRequestEnqueueAndBatching() {
@@ -51,12 +51,12 @@ void TestDirectStorageRequestEnqueueAndBatching() {
     (void)id1;
     ENGINE_ASSERT(id1 > 0, "Request 1 ID must be valid");
 
-    // 2. GDeflate-compressed GPU streaming request (1024 bytes -> 4096 bytes)
+    // 2. A second uncompressed request exercises batching without claiming GPU I/O.
     DSRequest req2{};
     req2.sourcePath = "assets://textures/hero_albedo.ctex";
     req2.sourceSize = 1024;
-    req2.uncompressedSize = 4096;
-    req2.compressionFormat = DSCompressionFormat::GDeflate;
+    req2.uncompressedSize = 1024;
+    req2.compressionFormat = DSCompressionFormat::None;
     req2.destinationGpuVirtualAddress = 0x20000000;
 
     u64 id2 = dsManager.EnqueueRequest(req2);
@@ -79,7 +79,7 @@ void TestDirectStorageFenceCompletionAndStats() {
     using namespace Engine::Assets;
     using namespace Engine::Core;
 
-    Logger::LogMessage(LogLevel::Info, "--- Milestone Phase 21: DirectStorage 1.2 GPU Decompression & Streaming ---");
+    Logger::LogMessage(LogLevel::Info, "--- Testing Simulated Queue Completion & Counters ---");
 
     DirectStorageManager dsManager;
     (void)dsManager.Initialize(64);
@@ -89,8 +89,8 @@ void TestDirectStorageFenceCompletionAndStats() {
     DSRequest req{};
     req.sourcePath = "assets://scenes/world_chunk_01.cmesh";
     req.sourceSize = 2048;
-    req.uncompressedSize = 8192;
-    req.compressionFormat = DSCompressionFormat::GDeflate;
+    req.uncompressedSize = 2048;
+    req.compressionFormat = DSCompressionFormat::None;
     req.destinationCpuBuffer = destBuffer.data();
 
     (void)dsManager.EnqueueRequest(req);
@@ -104,12 +104,12 @@ void TestDirectStorageFenceCompletionAndStats() {
 
     const auto& stats = dsManager.GetStats();
     (void)stats;
-    ENGINE_ASSERT(stats.totalRequestsSubmitted == 1, "Expected 1 submitted request");
-    ENGINE_ASSERT(stats.totalBytesRead == 2048, "Expected 2048 bytes read");
-    ENGINE_ASSERT(stats.totalBytesDecompressed == 8192, "Expected 8192 bytes decompressed (4x GDeflate ratio)");
+    ENGINE_ASSERT(stats.totalRequestsSubmitted == 1, "Expected one request to enter the simulated batch");
+    ENGINE_ASSERT(stats.totalBatchesSubmitted == 1, "Expected one simulated batch");
+    ENGINE_ASSERT(stats.inFlightRequests == 0, "Completed requests must not remain in flight");
 
     dsManager.Shutdown();
-    ENGINE_LOG_INFO("DirectStorage GDeflate completion and 4x decompression bandwidth statistics verified.");
+    ENGINE_LOG_INFO("Simulated queue completion and request counters verified; no I/O or decompression is claimed.");
 }
 
 void TestDirectStorageCorruptRequestGuardrails() {
@@ -153,8 +153,18 @@ void TestDirectStorageCorruptRequestGuardrails() {
     (void)id3;
     ENGINE_ASSERT(id3 == 0, "Corrupt GDeflate ratio request must be rejected");
 
+    // A valid GDeflate request is also rejected because this prototype has no native backend.
+    DSRequest unsupportedGDeflateReq{};
+    unsupportedGDeflateReq.sourcePath = "unsupported.gdeflate";
+    unsupportedGDeflateReq.sourceSize = 200;
+    unsupportedGDeflateReq.uncompressedSize = 500;
+    unsupportedGDeflateReq.compressionFormat = DSCompressionFormat::GDeflate;
+    unsupportedGDeflateReq.destinationCpuBuffer = &dummy;
+    const u64 unsupportedId = dsManager.EnqueueRequest(unsupportedGDeflateReq);
+    ENGINE_ASSERT(unsupportedId == 0, "GDeflate must be rejected until a native backend is implemented");
+
     dsManager.Shutdown();
-    ENGINE_LOG_INFO("DirectStorage guardrails correctly intercepted corrupt & invalid streaming requests.");
+    ENGINE_LOG_INFO("Queue simulator rejected invalid requests and unsupported GDeflate work.");
 }
 
 void RunDirectStorageUnitTests() {

@@ -31,6 +31,7 @@ public:
     static Input& Get();
 
     void BeginFrame();
+    void EndFrame();
 
     // Query state
     [[nodiscard]] bool IsKeyDown(KeyCode key) const noexcept;

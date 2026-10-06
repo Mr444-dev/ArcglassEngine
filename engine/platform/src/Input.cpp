@@ -17,13 +17,16 @@ Input& Input::Get() {
 void Input::BeginFrame() {
     m_keysPrevious = m_keysCurrent;
     m_mouseButtonsPrevious = m_mouseButtonsCurrent;
+    m_mouseDeltaX = 0.0f;
+    m_mouseDeltaY = 0.0f;
+    m_wheelDelta = 0.0f;
+}
 
+void Input::EndFrame() {
     m_mouseDeltaX = m_mouseX - m_lastMouseX;
     m_mouseDeltaY = m_mouseY - m_lastMouseY;
     m_lastMouseX = m_mouseX;
     m_lastMouseY = m_mouseY;
-
-    m_wheelDelta = 0.0f;
 }
 
 bool Input::IsKeyDown(KeyCode key) const noexcept {
@@ -66,6 +69,12 @@ void Input::SetKeyState(KeyCode key, bool isDown) {
 void Input::SetMouseButtonState(MouseButton button, bool isDown) {
     const auto idx = static_cast<size_t>(button);
     if (idx < m_mouseButtonsCurrent.size()) {
+        if (isDown && !m_mouseButtonsCurrent[idx]) {
+            // A drag starts at the button-down position; do not apply the
+            // cursor travel from the previous frame as the first drag delta.
+            m_lastMouseX = m_mouseX;
+            m_lastMouseY = m_mouseY;
+        }
         m_mouseButtonsCurrent[idx] = isDown;
     }
 }

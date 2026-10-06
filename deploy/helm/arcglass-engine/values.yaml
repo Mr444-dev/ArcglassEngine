@@ -1,12 +1,12 @@
 replicaCount: 3
 
 image:
-  repository: mygameengine/dedicated-server
+  repository: arcglass-engine/dedicated-server
   pullPolicy: IfNotPresent
   tag: "latest"
 
 server:
-  name: "Production-Game-Server"
+  name: "Arcglass-Server-Placeholder"
   tickRateHz: 60
   maxPlayers: 64
   udpPort: 7777

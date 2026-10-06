@@ -10,7 +10,7 @@
       "name": "windows-msvc-debug",
       "displayName": "Windows x64 MSVC (Debug)",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/windows-msvc-debug",
+      "binaryDir": "${sourceDir}/build/arcglass-msvc-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_CXX_COMPILER": "cl.exe",
@@ -23,7 +23,7 @@
       "name": "windows-msvc-release",
       "displayName": "Windows x64 MSVC (Release with Debug Info)",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/windows-msvc-release",
+      "binaryDir": "${sourceDir}/build/arcglass-msvc-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_CXX_COMPILER": "cl.exe",

@@ -1,4 +1,4 @@
-﻿#include "engine/core/BaseTypes.h"
+#include "engine/core/BaseTypes.h"
 #include "engine/core/Log.h"
 #include "engine/core/Assert.h"
 #include "engine/network/NetworkTypes.h"
@@ -110,7 +110,8 @@ void TestServerReconciliationOnDesync() {
 
     // 3. Simulate an unexpected server-side impulse (e.g. explosion/wind push +1.5m on X) at tick 10
     server.ApplyExternalImpulse(entityId, {1.5f, 0.0f, 0.0f});
-    server.TryGetEntityState(entityId, snapshotAt10.state);
+    const bool stateUpdated = server.TryGetEntityState(entityId, snapshotAt10.state);
+    ENGINE_ASSERT(stateUpdated, "Expected authoritative server state after the external impulse");
 
     // 4. Server snapshot for tick 10 arrives at client (client is currently at tick 20)
     ReconcileResult reconcile = client.OnServerSnapshotReceived(snapshotAt10);

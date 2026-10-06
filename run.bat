@@ -3,29 +3,31 @@ setlocal
 cd /d "%~dp0"
 
 echo =========================================================
-echo    MyGameEngine - Standard 2026 Unified Launcher
+echo    Arcglass Engine Launcher
 echo =========================================================
 echo.
 
-if not exist "build\bin\EngineEditor.exe" (
+if not exist "build\arcglass-msvc-release\bin\EngineEditor.exe" (
     echo [INFO] Binaries not found. Building engine first...
     call build_windows.bat
+    if errorlevel 1 exit /b 1
 )
 
 if "%1"=="game" (
-    echo Launching Standalone Game Runtime...
-    start "" "build\bin\GameRuntime.exe"
+    echo Launching the standalone runtime...
+    if not exist "build\arcglass-msvc-release\bin\GameRuntime.exe" exit /b 1
+    start "" "build\arcglass-msvc-release\bin\GameRuntime.exe"
     goto :eof
 )
 
 if "%1"=="tests" (
     echo Running Engine Test Suite...
-    "build\bin\Engine_Tests.exe"
-    pause
-    goto :eof
+    if not exist "build\arcglass-msvc-release\bin\Engine_Tests.exe" exit /b 1
+    "build\arcglass-msvc-release\bin\Engine_Tests.exe"
+    if errorlevel 1 exit /b 1
+    exit /b 0
 )
 
-echo Launching Unified 3D Engine Editor...
-echo (Tip: To launch standalone game client directly, run: run.bat game)
-start "" "build\bin\EngineEditor.exe"
+echo Launching the editor...
+start "" "build\arcglass-msvc-release\bin\EngineEditor.exe"
 

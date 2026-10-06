@@ -1,0 +1,14 @@
+apiVersion: v2
+name: arcglass-engine
+description: Exploratory Kubernetes template; the dedicated server target is not implemented or verified.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Arcglass Engine contributors
+keywords:
+  - game-engine
+  - dedicated-server
+  - multiplayer
+  - directx12
+  - vulkan

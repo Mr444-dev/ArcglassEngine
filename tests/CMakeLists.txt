@@ -36,6 +36,9 @@ target_link_libraries(Engine_Tests PRIVATE
     Engine_Network
 )
 
+# Keep ENGINE_ASSERT checks active in test translation units, including Release builds.
+target_compile_definitions(Engine_Tests PRIVATE ENGINE_ENABLE_ASSERTS)
+
 target_set_compiler_warnings(Engine_Tests)
 
 add_test(NAME Engine_UnitTests COMMAND Engine_Tests)

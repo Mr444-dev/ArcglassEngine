@@ -2,13 +2,15 @@
 setlocal
 cd /d "%~dp0"
 echo =========================================================
-echo    Launching MyGameEngine - Standalone 3D Editor
+echo    Launching Arcglass Engine Editor
 echo =========================================================
 
-if not exist "build\bin\EngineEditor.exe" (
+if not exist "build\arcglass-msvc-release\bin\EngineEditor.exe" (
     echo [INFO] EngineEditor.exe not found. Building first...
     call build_windows.bat
+    if errorlevel 1 exit /b 1
 )
 
-start "" "build\bin\EngineEditor.exe"
+if not exist "build\arcglass-msvc-release\bin\EngineEditor.exe" exit /b 1
+start "" "build\arcglass-msvc-release\bin\EngineEditor.exe"
 

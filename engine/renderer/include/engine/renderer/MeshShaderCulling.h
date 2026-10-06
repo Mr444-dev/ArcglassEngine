@@ -38,7 +38,7 @@ public:
         const HierarchicalDepthBuffer* hzb
     ) noexcept;
 
-    // Full GPU micro-culling pipeline: Frustum -> Backface Cone -> HZB Occlusion
+    // CPU reference culling: Frustum -> Backface Cone -> HZB Occlusion
     [[nodiscard]] static Core::u32 CullClusters(
         const MeshletHardwarePayload* clusters,
         Core::u32 clusterCount,

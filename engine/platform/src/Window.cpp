@@ -1,7 +1,8 @@
-﻿#include "engine/platform/Window.h"
+#include "engine/platform/Window.h"
 #include "engine/platform/Input.h"
 #include "engine/core/Log.h"
 #include "engine/core/Assert.h"
+#include "../resources/resource.h"
 
 #if defined(_WIN32)
     #ifndef WIN32_LEAN_AND_MEAN
@@ -73,19 +74,8 @@ LRESULT CALLBACK EngineWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             }
             return 0;
         }
-        case WM_SIZE: {
-            if (window) {
-                const Core::u32 width = LOWORD(lParam);
-                const Core::u32 height = HIWORD(lParam);
-                
-                if (wParam == SIZE_MINIMIZED) {
-                    // Minimized
-                } else if (width > 0 && height > 0) {
-                    // Update dimensions
-                }
-            }
+        case WM_SIZE:
             break;
-        }
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN: {
             KeyCode key = VirtualKeyToEngineKey(wParam);
@@ -109,21 +99,38 @@ LRESULT CALLBACK EngineWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
             break;
         }
         case WM_LBUTTONDOWN:
+            Input::Get().SetMousePosition(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
             Input::Get().SetMouseButtonState(MouseButton::Left, true);
+            SetCapture(hwnd);
             break;
         case WM_LBUTTONUP:
+            Input::Get().SetMousePosition(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
             Input::Get().SetMouseButtonState(MouseButton::Left, false);
+            if (!Input::Get().IsMouseButtonDown(MouseButton::Right) && !Input::Get().IsMouseButtonDown(MouseButton::Middle)) ReleaseCapture();
             break;
         case WM_RBUTTONDOWN:
+            Input::Get().SetMousePosition(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
             Input::Get().SetMouseButtonState(MouseButton::Right, true);
+            SetCapture(hwnd);
             break;
         case WM_RBUTTONUP:
+            Input::Get().SetMousePosition(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
             Input::Get().SetMouseButtonState(MouseButton::Right, false);
+            if (!Input::Get().IsMouseButtonDown(MouseButton::Left) && !Input::Get().IsMouseButtonDown(MouseButton::Middle)) ReleaseCapture();
             break;
         case WM_MBUTTONDOWN:
+            Input::Get().SetMousePosition(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
             Input::Get().SetMouseButtonState(MouseButton::Middle, true);
+            SetCapture(hwnd);
             break;
         case WM_MBUTTONUP:
+            Input::Get().SetMousePosition(static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam)));
+            Input::Get().SetMouseButtonState(MouseButton::Middle, false);
+            if (!Input::Get().IsMouseButtonDown(MouseButton::Left) && !Input::Get().IsMouseButtonDown(MouseButton::Right)) ReleaseCapture();
+            break;
+        case WM_CAPTURECHANGED:
+            Input::Get().SetMouseButtonState(MouseButton::Left, false);
+            Input::Get().SetMouseButtonState(MouseButton::Right, false);
             Input::Get().SetMouseButtonState(MouseButton::Middle, false);
             break;
         case WM_MOUSEWHEEL: {
@@ -163,6 +170,8 @@ bool Window::Initialize(const WindowDesc& desc) {
     wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
     wc.lpfnWndProc = EngineWndProc;
     wc.hInstance = hInstance;
+    wc.hIcon = LoadIconW(hInstance, MAKEINTRESOURCEW(IDI_ARCGLASS_APP));
+    wc.hIconSm = wc.hIcon;
     wc.hCursor = LoadCursorW(nullptr, (LPCWSTR)IDC_ARROW);
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     wc.lpszClassName = className;
@@ -237,6 +246,16 @@ bool Window::PollEvents() {
             m_shouldClose = true;
             if (m_onClose) m_onClose();
             return false;
+        }
+        if (msg.hwnd == static_cast<HWND>(m_handle) && msg.message == WM_SIZE) {
+            const Core::u32 width = LOWORD(msg.lParam);
+            const Core::u32 height = HIWORD(msg.lParam);
+            m_isMinimized = msg.wParam == SIZE_MINIMIZED || width == 0 || height == 0;
+            if (!m_isMinimized && (width != m_width || height != m_height)) {
+                m_width = width;
+                m_height = height;
+                if (m_onResize) m_onResize(width, height);
+            }
         }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);

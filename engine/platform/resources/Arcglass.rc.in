@@ -1,0 +1,2 @@
+#include "@CMAKE_CURRENT_SOURCE_DIR@/engine/platform/resources/resource.h"
+IDI_ARCGLASS_APP ICON "@CMAKE_CURRENT_SOURCE_DIR@/engine/platform/resources/Arcglass.ico"

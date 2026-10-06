@@ -1,39 +1,43 @@
-# Build & Output directories
-build/
-out/
-bin/
-lib/
-dist/
+# CMake and generated builds
+/build/
+/build-*/
+/out/
+/cmake-build-*/
+/dist/
+/vcpkg_installed/
+
+# IDE and editor state
 .vs/
 .idea/
 .vscode/
+*.suo
+*.user
+*.sln
+*.VC.db
+*.VC.VC.opendb
 
-# Package managers & dependencies
-vcpkg_installed/
-
-# OS specific
-Thumbs.db
-.DS_Store
-
-# Executables & binaries
+# Compiled artifacts
 *.exe
 *.dll
 *.lib
 *.a
 *.so
 *.dylib
-EngineEditor.exe
-GameRuntime.exe
-
-# Temporary & Log files
-*.log
-*.tmp
 *.pdb
 *.ilk
-*.suo
-*.user
+*.obj
+*.exp
+*.pch
+*.idb
 
-# Secrets and environment
+# Logs and temporary files
+*.log
+*.tmp
+*.cache
+Thumbs.db
+.DS_Store
+
+# Local configuration and secrets
 .env
 .env.*
 !.env.example

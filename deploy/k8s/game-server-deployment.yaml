@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: game-server
-        image: mygameengine/dedicated-server:latest
+        image: arcglass-engine/dedicated-server:latest
         imagePullPolicy: IfNotPresent
         ports:
         - name: game-udp

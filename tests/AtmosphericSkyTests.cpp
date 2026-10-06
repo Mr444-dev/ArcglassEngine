@@ -37,16 +37,22 @@ void TestAtmosphericSkyRadiance() {
     AtmosphereParameters params{};
     params.sunDirection = {0.0f, 1.0f, 0.0f}; // Sun directly at zenith (high noon)
 
-    // 1. Look directly overhead: clear blue sky with blue dominance (B > R)
-    const Vec3 zenithRadiance = AtmosphericSky::ComputeSkyRadiance({0.0f, 1.0f, 0.0f}, params);
-    ENGINE_ASSERT(zenithRadiance.z > zenithRadiance.x, "Overhead sky must exhibit blue Rayleigh dominance (B > R)");
+    // Looking toward the sun includes the bright solar disc contribution.
+    const Vec3 sunRadiance = AtmosphericSky::ComputeSkyRadiance({0.0f, 1.0f, 0.0f}, params);
+    ENGINE_ASSERT(sunRadiance.x > 0.0f && sunRadiance.y > 0.0f && sunRadiance.z > 0.0f,
+        "Sun-facing radiance must be positive in every channel");
 
-    // 2. Look near horizon: increased optical path length shifts spectrum
+    // Looking away from the zenith sun isolates the blue-biased Rayleigh scattering.
+    const Vec3 blueSkyRadiance = AtmosphericSky::ComputeSkyRadiance({1.0f, 0.0f, 0.0f}, params);
+    ENGINE_ASSERT(blueSkyRadiance.z > blueSkyRadiance.x,
+        "Off-sun sky must exhibit blue Rayleigh dominance (B > R)");
+
     const Vec3 horizonRadiance = AtmosphericSky::ComputeSkyRadiance({1.0f, 0.05f, 0.0f}, params);
-    ENGINE_ASSERT(horizonRadiance.x > 0.0f && horizonRadiance.y > 0.0f && horizonRadiance.z > 0.0f, "Horizon radiance must be non-zero");
+    ENGINE_ASSERT(horizonRadiance.x > 0.0f && horizonRadiance.y > 0.0f && horizonRadiance.z > 0.0f,
+        "Horizon radiance must be non-zero");
 
-    ENGINE_LOG_INFO("Atmospheric Rayleigh blue sky chromaticity verified (Zenith: [{:.3f}, {:.3f}, {:.3f}]).",
-        zenithRadiance.x, zenithRadiance.y, zenithRadiance.z);
+    ENGINE_LOG_INFO("Off-sun Rayleigh sky chromaticity verified (RGB: [{:.6f}, {:.6f}, {:.6f}]).",
+        blueSkyRadiance.x, blueSkyRadiance.y, blueSkyRadiance.z);
 }
 
 void TestDualLobeGGXMicrofacets() {

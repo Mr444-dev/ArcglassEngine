@@ -39,6 +39,11 @@ target_link_libraries(Engine_Editor_Lib PUBLIC
 
 target_set_compiler_warnings(Engine_Editor_Lib)
 
-add_executable(EngineEditor src/Main.cpp)
+add_executable(EngineEditor src/Main.cpp ${CMAKE_BINARY_DIR}/ArcglassResources.rc)
 target_link_libraries(EngineEditor PRIVATE Engine_Editor_Lib)
+if(WIN32)
+    target_link_libraries(EngineEditor PRIVATE comdlg32 shell32)
+endif()
 target_set_compiler_warnings(EngineEditor)
+
+engine_compile_shader_set(EngineEditor shaders/editor/EditorUI.hlsl editor)
