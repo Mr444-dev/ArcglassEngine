@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+<title id="title">Arcglass Engine mark</title><desc id="desc">A faceted prism emitting a precise cyan ray.</desc>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#172438"/><stop offset="1" stop-color="#0b111b"/></linearGradient><linearGradient id="ice" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9af5ff"/><stop offset="1" stop-color="#26a8d8"/></linearGradient></defs>
+<rect x="4" y="4" width="120" height="120" rx="28" fill="url(#bg)" stroke="#31445c" stroke-width="2"/>
+<path d="M32 77 59 28l34 14-4 48-39 15z" fill="#142b40" stroke="url(#ice)" stroke-width="3" stroke-linejoin="round"/>
+<path d="m59 28 3 45 27 17M32 77l30-4 31-31M49 105l13-32" fill="none" stroke="#77dcf2" stroke-opacity=".72" stroke-width="2" stroke-linejoin="round"/>
+<path d="m94 37 18-12M99 52h19M96 68l15 8" stroke="#b7f7ff" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="111" cy="25" r="3" fill="#aef7ff"/><circle cx="118" cy="52" r="3" fill="#aef7ff"/><circle cx="111" cy="76" r="3" fill="#aef7ff"/>
+</svg>
