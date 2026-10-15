@@ -12,8 +12,8 @@ This repository is a learning and portfolio project, not a production-ready engi
 
 [![Windows CI](https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml)
 
-
 <p align="center"><a href="#why-this-project-exists">Overview</a> &nbsp;·&nbsp; <a href="#architecture">Architecture</a> &nbsp;·&nbsp; <a href="#build-requirements">Build</a> &nbsp;·&nbsp; <a href="#build-and-test">Tests</a> &nbsp;·&nbsp; <a href="#portfolio-status">Status</a></p>
+
 ## Why this project exists
 
 A game engine needs clear boundaries between platform services, rendering, world data, assets, and tools. This project explores those boundaries in native C++ and keeps the verified Windows graphics path distinct from modules that remain experiments.
@@ -173,7 +173,6 @@ Subsystem checks are collected in the native test executable and CTest target. T
 ## Portfolio status
 
 The strongest verified material is the C++20 module structure, Direct3D 12 device/swap-chain path, engine-side data structures, and repeatable Windows CI. Present renderer features as experiments or work in progress until they are rendered by the runtime and captured in a reproducible demo.
-
 
 ## What This Project Demonstrates
 
