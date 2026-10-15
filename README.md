@@ -4,7 +4,15 @@
 
 <h1 align="center">Arcglass Engine</h1>
 
-<p align="center"><a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT%20(source%20only)-blue.svg" alt="MIT license for original source only"></a></p>
+<p align="center"><strong>C++20 and Direct3D 12 engine prototype with a custom Windows editor</strong></p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT%20(source%20only)-blue.svg" alt="MIT license for original source only"></a>
+  <a href="https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml"><img src="https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml/badge.svg" alt="Windows CI"></a>
+  <img src="https://img.shields.io/badge/Status-prototype-orange.svg" alt="Prototype status">
+</p>
+
+<p align="center"><strong>C++20 · CMake · MSVC · Win32 · Direct3D 12 · HLSL · CTest</strong></p>
 
 **Stack:** C++20 · CMake · MSVC · Win32 · Direct3D 12 · HLSL · CTest
 
@@ -12,9 +20,9 @@ Arcglass Engine is a Windows game-engine prototype written in C++20. It contains
 
 This repository is a learning and portfolio project, not a production-ready engine. The editor and runtime start on the verified Windows development machine. Many engine modules have unit-level checks, but they are not all connected into a complete end-to-end game pipeline.
 
-[![Windows CI](https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml)
+<p align="center"><strong>Demo capture:</strong> No recorded clip is committed yet. The <a href="docs/TECH_DEMO_GUIDE.md">45-second editor walkthrough</a> lists a repeatable capture sequence.</p>
 
-<p align="center"><a href="#why-this-project-exists">Overview</a> &nbsp;·&nbsp; <a href="#architecture">Architecture</a> &nbsp;·&nbsp; <a href="#build-requirements">Build</a> &nbsp;·&nbsp; <a href="#build-and-test">Tests</a> &nbsp;·&nbsp; <a href="#portfolio-status">Status</a></p>
+<p align="center"><a href="#why-this-project-exists">Overview</a> &nbsp;·&nbsp; <a href="#architecture">Architecture</a> &nbsp;·&nbsp; <a href="#build-requirements">Build</a> &nbsp;·&nbsp; <a href="#build-and-test">Tests</a> &nbsp;·&nbsp; <a href="docs/TECH_DEMO_GUIDE.md">Demo guide</a> &nbsp;·&nbsp; <a href="#portfolio-status">Status</a></p>
 
 ## Why this project exists
 
@@ -54,7 +62,7 @@ The checkout does not track executables. Fresh binaries are generated under the 
 - Vulkan headers and Linux/deployment files are exploratory scaffolding; only the Windows Direct3D 12 build and test path has been verified here.
 - Performance values in historical planning documents have not been reproduced as benchmarks and are not presented as current results.
 - One CTest test is registered; it invokes a larger executable containing multiple internal checks. This is not complete subsystem coverage.
-- No license file is present. Add a license you choose before publishing publicly.
+- Original source code is covered by the repository's MIT license; third-party code, assets, fonts, and dependencies keep their own terms. See [LICENSE](LICENSE).
 
 ## My Contribution
 
@@ -175,6 +183,10 @@ Subsystem checks are collected in the native test executable and CTest target. T
 ## Portfolio status
 
 The strongest verified material is the C++20 module structure, Direct3D 12 device/swap-chain path, engine-side data structures, and repeatable Windows CI. Present renderer features as experiments or work in progress until they are rendered by the runtime and captured in a reproducible demo.
+
+## License
+
+Original source code authored for this repository is distributed under the MIT License. Third-party code, assets, fonts, and dependencies retain their own licenses; see [LICENSE](LICENSE) and the bundled Inter font license.
 
 ## What This Project Demonstrates
 
