@@ -4,6 +4,8 @@
 
 <h1 align="center">Arcglass Engine</h1>
 
+<p align="center"><a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT%20(source%20only)-blue.svg" alt="MIT license for original source only"></a></p>
+
 **Stack:** C++20 · CMake · MSVC · Win32 · Direct3D 12 · HLSL · CTest
 
 Arcglass Engine is a Windows game-engine prototype written in C++20. It contains a Direct3D 12 rendering interface, engine subsystems, a small custom editor, a standalone runtime, and a native test executable.
