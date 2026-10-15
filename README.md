@@ -1,4 +1,8 @@
-# Arcglass Engine
+<p align="center">
+  <img src="docs/assets/portfolio-mark.svg" alt="Arcglass Engine logo" width="96" height="96">
+</p>
+
+<h1 align="center">Arcglass Engine</h1>
 
 **Stack:** C++20 · CMake · MSVC · Win32 · Direct3D 12 · HLSL · CTest
 
@@ -8,6 +12,8 @@ This repository is a learning and portfolio project, not a production-ready engi
 
 [![Windows CI](https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml)
 
+
+<p align="center"><a href="#why-this-project-exists">Overview</a> &nbsp;·&nbsp; <a href="#architecture">Architecture</a> &nbsp;·&nbsp; <a href="#build-requirements">Build</a> &nbsp;·&nbsp; <a href="#build-and-test">Tests</a> &nbsp;·&nbsp; <a href="#portfolio-status">Status</a></p>
 ## Why this project exists
 
 A game engine needs clear boundaries between platform services, rendering, world data, assets, and tools. This project explores those boundaries in native C++ and keeps the verified Windows graphics path distinct from modules that remain experiments.
