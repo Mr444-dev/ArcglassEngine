@@ -14,8 +14,6 @@
 
 <p align="center"><strong>C++20 · CMake · MSVC · Win32 · Direct3D 12 · HLSL · CTest</strong></p>
 
-**Stack:** C++20 · CMake · MSVC · Win32 · Direct3D 12 · HLSL · CTest
-
 Arcglass Engine is a Windows game-engine prototype written in C++20. It contains a Direct3D 12 rendering interface, engine subsystems, a small custom editor, a standalone runtime, and a native test executable.
 
 This repository is a learning and portfolio project, not a production-ready engine. The editor and runtime start on the verified Windows development machine. Many engine modules have unit-level checks, but they are not all connected into a complete end-to-end game pipeline.
