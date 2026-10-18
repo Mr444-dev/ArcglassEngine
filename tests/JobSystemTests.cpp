@@ -2,6 +2,7 @@
 #include "engine/core/Assert.h"
 #include "engine/core/Log.h"
 #include <atomic>
+#include <thread>
 #include <vector>
 
 void TestLinearAllocator();
@@ -32,7 +33,7 @@ void TestJobSystem() {
     std::vector<JobData> jobsData(TOTAL_JOBS, JobData{&counter});
 
     for (u32 i = 0; i < TOTAL_JOBS; ++i) {
-        jobSystem.SubmitJob(jobFunc, &jobsData[i], &jobCounter);
+        ENGINE_VERIFY(jobSystem.SubmitJob(jobFunc, &jobsData[i], &jobCounter), "JobSystem rejected a job while running");
     }
 
     jobSystem.WaitForCounter(&jobCounter);
@@ -64,13 +65,54 @@ void TestJobSystem() {
     ENGINE_LOG_INFO("ParallelFor test passed on {} elements.", ARRAY_SIZE);
 
     jobSystem.Shutdown();
+
+    std::atomic<u32> drainedJobs{0};
+    jobSystem.Initialize(2);
+    for (u32 i = 0; i < 10000; ++i) {
+        ENGINE_VERIFY(jobSystem.SubmitJob([](void* raw) {
+            static_cast<std::atomic<u32>*>(raw)->fetch_add(1, std::memory_order_relaxed);
+        }, &drainedJobs), "JobSystem rejected a drain-test job while running");
+    }
+    jobSystem.Shutdown();
+    ENGINE_ASSERT(drainedJobs.load(std::memory_order_relaxed) == 10000, "JobSystem shutdown dropped queued jobs");
+    ENGINE_ASSERT(!jobSystem.SubmitJob(jobFunc, nullptr), "Stopped JobSystem accepted a job");
+
+    // Shutdown must keep queues alive while an external waiter is still draining them.
+    jobSystem.Initialize(2);
+    struct ShutdownGate {
+        std::atomic<bool> entered{false};
+        std::atomic<bool> release{false};
+    } gate;
+    JobCounter shutdownCounter;
+    ENGINE_VERIFY(jobSystem.SubmitJob([](void* raw) {
+        auto* gate = static_cast<ShutdownGate*>(raw);
+        gate->entered.store(true, std::memory_order_release);
+        while (!gate->release.load(std::memory_order_acquire)) std::this_thread::yield();
+    }, &gate, &shutdownCounter), "JobSystem rejected shutdown-gate job");
+    while (!gate.entered.load(std::memory_order_acquire)) std::this_thread::yield();
+
+    std::thread waiter([&] { jobSystem.WaitForCounter(&shutdownCounter); });
+    std::thread shutdown([&] { jobSystem.Shutdown(); });
+    while (jobSystem.IsRunning()) std::this_thread::yield();
+    gate.release.store(true, std::memory_order_release);
+    waiter.join();
+    shutdown.join();
+    ENGINE_ASSERT(shutdownCounter.IsComplete(), "JobSystem shutdown waiter did not observe completion");
+
+    std::vector<u32> synchronousFallback(16, 0);
+    jobSystem.ParallelFor(static_cast<u32>(synchronousFallback.size()), 3,
+        [](u32 index, void* raw) {
+            (*static_cast<std::vector<u32>*>(raw))[index] = index + 1;
+        }, &synchronousFallback);
+    for (u32 i = 0; i < synchronousFallback.size(); ++i) {
+        ENGINE_ASSERT(synchronousFallback[i] == i + 1, "Stopped JobSystem ParallelFor fallback missed work");
+    }
     ENGINE_LOG_INFO("JobSystem passed all checks.");
 }
 
 void TestLinearAllocator();
 void TestFrameAllocator();
 void TestPoolAllocator();
-void RunRHIGraphicsTest();
 void RunRenderGraphUnitTests();
 void RunWorldUnitTests();
 void RunAssetUnitTests();
@@ -116,8 +158,6 @@ int main() {
     RunAtmosphericSkyUnitTests();
     RunDirectStorageUnitTests();
     RunWorldUnitTests();
-    RunRHIGraphicsTest();
-
-    ENGINE_LOG_INFO("\nALL ENGINE CORE, ASSETS, PHYSICS, EDITOR, GPU-DRIVEN, ANIMATION, AUDIO, PROFILER, DISTRIBUTION, NEXT-GEN RENDERER, RAY TRACING, MESHLET GI, DIRECTSTORAGE, RHI, RENDERER & WORLD TESTS PASSED SUCCESSFULLY!");
+    ENGINE_LOG_INFO("\nALL CPU ENGINE, ASSET, PHYSICS, EDITOR, RENDERER-METADATA & WORLD CHECKS PASSED SUCCESSFULLY!");
     return 0;
 }

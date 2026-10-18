@@ -13,7 +13,7 @@ public:
     TransformHierarchy() = default;
     ~TransformHierarchy() = default;
 
-    void AttachChild(EntityID parent, EntityID child, Registry& registry);
+    [[nodiscard]] bool AttachChild(EntityID parent, EntityID child, Registry& registry);
     void DetachChild(EntityID child, Registry& registry);
 
     void UpdateWorldTransforms(Registry& registry);
@@ -24,8 +24,6 @@ public:
 
 private:
     void RebuildOrder(Registry& registry);
-    void BuildDFS(EntityID entity, Registry& registry);
-
     std::vector<EntityID> m_sortedEntities;
     bool m_needsSort{true};
 };

@@ -2,6 +2,7 @@
 
 #include "engine/assets/BinaryFormats.h"
 #include "engine/assets/AssetDatabase.h"
+#include <cstddef>
 #include <vector>
 #include <string>
 
@@ -20,6 +21,7 @@ public:
         Core::u32 width,
         Core::u32 height,
         const Core::u8* rgbaPixels,
+        size_t rgbaByteCount,
         const std::string& outVirtualPath,
         AssetGUID guid = AssetGUID::CreateRandom()
     );

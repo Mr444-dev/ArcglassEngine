@@ -196,13 +196,15 @@ struct Mat4x4 {
 
     [[nodiscard]] Mat4x4 operator*(const Mat4x4& o) const noexcept {
         Mat4x4 res{};
-        for (int r = 0; r < 4; ++r) {
-            for (int c = 0; c < 4; ++c) {
+        // Row-major storage with DirectX's row-vector convention: p * (A * B)
+        // applies A first, then B. Translation therefore lives at m[12..14].
+        for (int row = 0; row < 4; ++row) {
+            for (int column = 0; column < 4; ++column) {
                 float sum = 0.0f;
-                for (int k = 0; k < 4; ++k) {
-                    sum += m[r + k * 4] * o.m[k + c * 4];
+                for (int inner = 0; inner < 4; ++inner) {
+                    sum += m[row * 4 + inner] * o.m[inner * 4 + column];
                 }
-                res.m[r + c * 4] = sum;
+                res.m[row * 4 + column] = sum;
             }
         }
         return res;

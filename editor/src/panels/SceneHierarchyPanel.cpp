@@ -57,7 +57,7 @@ void SceneHierarchyPanel::DeleteSelectedEntity(EditorContext& context) {
 void SceneHierarchyPanel::ReparentEntity(EditorContext& context, World::EntityID child, World::EntityID newParent) {
     if (!context.scene) return;
     if (newParent != World::NULL_ENTITY) {
-        context.scene->GetHierarchy().AttachChild(newParent, child, context.scene->GetRegistry());
+        if (!context.scene->GetHierarchy().AttachChild(newParent, child, context.scene->GetRegistry())) return;
     } else {
         context.scene->GetHierarchy().DetachChild(child, context.scene->GetRegistry());
     }

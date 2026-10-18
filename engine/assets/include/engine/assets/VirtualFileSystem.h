@@ -21,6 +21,8 @@ public:
     void Mount(const std::string& virtualPrefix, const std::string& physicalRoot);
     void Unmount(const std::string& virtualPrefix);
 
+    // Returns an empty string when a virtual mount is unknown or a path escapes it.
+    // Unqualified paths remain explicit local paths for engine-owned files.
     [[nodiscard]] std::string ResolvePhysicalPath(const std::string& virtualPath) const;
     [[nodiscard]] bool FileExists(const std::string& virtualPath) const;
 

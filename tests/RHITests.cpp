@@ -97,7 +97,7 @@ void RunRHIGraphicsTest() {
         ENGINE_LOG_INFO("Rendered and presented test frame {}.", frame);
     }
 
-    Core::Logger::LogMessage(Core::LogLevel::Info, "RHI Pipeline Test completed with 0 validation errors.");
+    Core::Logger::LogMessage(Core::LogLevel::Info, "RHI Pipeline smoke test completed.");
 
     // 8. Clean Shutdown
     device.WaitForGPU();

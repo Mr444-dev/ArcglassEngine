@@ -38,8 +38,8 @@ void TestTLASInstanceDescriptorAndAffineTransform() {
     instance.instanceContributionToHitGroupIndex = 0;
     instance.accelerationStructureGPUVirtualAddress = 0x10000000;
 
-    // Construct transform matrix: Translate(10, 20, 30) * Scale(2, 2, 2)
-    Mat4x4 mat = Mat4x4::Translation({10.0f, 20.0f, 30.0f}) * Mat4x4::Scale({2.0f, 2.0f, 2.0f});
+    // Engine matrices use row vectors: scale first, then translate without scaling the offset.
+    Mat4x4 mat = Mat4x4::Scale({2.0f, 2.0f, 2.0f}) * Mat4x4::Translation({10.0f, 20.0f, 30.0f});
     instance.SetTransform(mat);
 
     // Verify 3x4 affine layout:

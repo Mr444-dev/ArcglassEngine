@@ -30,4 +30,4 @@ jobs:
         run: cmake --build --preset windows-msvc-release --parallel
 
       - name: Test
-        run: ctest --test-dir build/windows-msvc-release -C RelWithDebInfo --output-on-failure
+        run: ctest --test-dir build/arcglass-msvc-release -C RelWithDebInfo -LE gpu --output-on-failure

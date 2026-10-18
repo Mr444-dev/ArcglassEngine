@@ -1,9 +1,9 @@
 #include "engine/core/JobSystem.h"
 #include "engine/core/Log.h"
-#include "engine/core/Assert.h"
-#include "engine/core/Profiler.h"
 #include <algorithm>
 #include <chrono>
+#include <exception>
+#include <memory>
 
 namespace Engine::Core {
 
@@ -17,14 +17,15 @@ struct JobWrapperPayload {
 };
 
 void JobWrapperCallback(void* rawData) {
-    auto* payload = static_cast<JobWrapperPayload*>(rawData);
-    if (payload->originalFunction) {
+    std::unique_ptr<JobWrapperPayload> payload(static_cast<JobWrapperPayload*>(rawData));
+    try {
         payload->originalFunction(payload->originalData);
+    } catch (const std::exception& error) {
+        ENGINE_LOG_ERROR("JobSystem: Job threw an exception: {}", error.what());
+    } catch (...) {
+        ENGINE_LOG_ERROR("JobSystem: Job threw a non-standard exception.");
     }
-    if (payload->counter) {
-        payload->counter->Decrement();
-    }
-    delete payload;
+    if (payload->counter) payload->counter->Decrement();
 }
 
 struct ParallelForPayload {
@@ -36,45 +37,42 @@ struct ParallelForPayload {
 };
 
 void ParallelForBatchCallback(void* rawData) {
-    auto* payload = static_cast<ParallelForPayload*>(rawData);
-    for (u32 i = payload->startIndex; i < payload->endIndex; ++i) {
-        payload->function(i, payload->data);
+    std::unique_ptr<ParallelForPayload> payload(static_cast<ParallelForPayload*>(rawData));
+    try {
+        for (u32 index = payload->startIndex; index < payload->endIndex; ++index) {
+            payload->function(index, payload->data);
+        }
+    } catch (const std::exception& error) {
+        ENGINE_LOG_ERROR("JobSystem: ParallelFor batch threw an exception: {}", error.what());
+    } catch (...) {
+        ENGINE_LOG_ERROR("JobSystem: ParallelFor batch threw a non-standard exception.");
     }
-    if (payload->counter) {
-        payload->counter->Decrement();
-    }
-    delete payload;
+    if (payload->counter) payload->counter->Decrement();
 }
+
 } // namespace
 
-// WorkStealingQueue implementation
 bool WorkStealingQueue::Push(const Job& job) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_tail - m_head >= CAPACITY) {
-        return false;
-    }
+    if (m_tail - m_head >= CAPACITY) return false;
     m_buffer[m_tail & MASK] = job;
-    m_tail++;
+    ++m_tail;
     return true;
 }
 
 bool WorkStealingQueue::Pop(Job& outJob) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_tail <= m_head) {
-        return false;
-    }
-    m_tail--;
+    if (m_tail <= m_head) return false;
+    --m_tail;
     outJob = m_buffer[m_tail & MASK];
     return true;
 }
 
 bool WorkStealingQueue::Steal(Job& outJob) {
     std::unique_lock<std::mutex> lock(m_mutex, std::try_to_lock);
-    if (!lock.owns_lock() || m_tail <= m_head) {
-        return false;
-    }
+    if (!lock.owns_lock() || m_tail <= m_head) return false;
     outJob = m_buffer[m_head & MASK];
-    m_head++;
+    ++m_head;
     return true;
 }
 
@@ -83,7 +81,6 @@ bool WorkStealingQueue::IsEmpty() const noexcept {
     return m_tail <= m_head;
 }
 
-// JobSystem implementation
 JobSystem& JobSystem::Get() {
     static JobSystem instance;
     return instance;
@@ -94,60 +91,117 @@ JobSystem::~JobSystem() {
 }
 
 void JobSystem::Initialize(u32 threadCount) {
-    if (m_running.load(std::memory_order_acquire)) {
-        return;
-    }
+    std::unique_lock<std::mutex> lock(m_lifecycleMutex);
+    m_lifecycleChanged.wait(lock, [this] { return !m_shuttingDown; });
+    if (m_running.load(std::memory_order_acquire)) return;
 
     if (threadCount == 0) {
         const u32 hardwareThreads = std::thread::hardware_concurrency();
         threadCount = (hardwareThreads > 1) ? (hardwareThreads - 1) : 1;
     }
 
+    m_queues = std::vector<WorkStealingQueue>(static_cast<size_t>(threadCount) + 1);
     m_running.store(true, std::memory_order_release);
-    m_queues = std::vector<WorkStealingQueue>(threadCount + 1); // +1 for main thread
-
-    m_workers.reserve(threadCount);
-    for (u32 i = 0; i < threadCount; ++i) {
-        m_workers.emplace_back(&JobSystem::WorkerLoop, this, i + 1);
+    try {
+        m_workers.reserve(threadCount);
+        for (u32 workerIndex = 0; workerIndex < threadCount; ++workerIndex) {
+            m_workers.emplace_back(&JobSystem::WorkerLoop, this, workerIndex + 1);
+        }
+    } catch (const std::exception& error) {
+        m_running.store(false, std::memory_order_release);
+        for (auto& worker : m_workers) {
+            if (worker.joinable()) worker.join();
+        }
+        m_workers.clear();
+        m_queues.clear();
+        ENGINE_LOG_ERROR("JobSystem: Failed to create worker threads: {}", error.what());
+        return;
     }
 
     ENGINE_LOG_INFO("JobSystem initialized with {} worker threads.", threadCount);
 }
 
 void JobSystem::Shutdown() {
-    if (!m_running.load(std::memory_order_acquire)) {
+    if (t_workerIndex != 0) {
+        ENGINE_LOG_ERROR("JobSystem: Shutdown must be requested from a non-worker thread.");
         return;
     }
 
-    m_running.store(false, std::memory_order_release);
-
-    for (auto& worker : m_workers) {
-        if (worker.joinable()) {
-            worker.join();
-        }
+    std::vector<std::thread> workers;
+    {
+        std::unique_lock<std::mutex> lock(m_lifecycleMutex);
+        m_lifecycleChanged.wait(lock, [this] { return !m_shuttingDown; });
+        if (!m_running.load(std::memory_order_acquire)) return;
+        m_shuttingDown = true;
+        m_running.store(false, std::memory_order_release);
+        m_lifecycleChanged.wait(lock, [this] { return m_activeQueueUsers == 0; });
+        workers.swap(m_workers);
     }
-    m_workers.clear();
-    m_queues.clear();
 
-    ENGINE_LOG_INFO("JobSystem shut down cleanly.");
+    // Workers continue draining queued jobs after the running flag is cleared.
+    for (auto& worker : workers) {
+        if (worker.joinable()) worker.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(m_lifecycleMutex);
+        m_queues.clear();
+        m_shuttingDown = false;
+    }
+    m_lifecycleChanged.notify_all();
+    ENGINE_LOG_INFO("JobSystem shut down after draining queued work.");
 }
 
-void JobSystem::SubmitJob(JobFunction function, void* data, JobCounter* counter) {
-    if (!m_running.load(std::memory_order_acquire)) {
-        return;
-    }
+bool JobSystem::SubmitJob(JobFunction function, void* data, JobCounter* counter) {
+    if (!function) return false;
 
-    if (counter) {
-        counter->Increment();
-    }
+    auto payload = std::make_unique<JobWrapperPayload>(JobWrapperPayload{function, data, counter});
+    const Job job{JobWrapperCallback, payload.get()};
+    if (!BeginQueueUse()) return false;
 
-    auto* payload = new JobWrapperPayload{function, data, counter};
-    Job job{JobWrapperCallback, payload};
+    while (true) {
+        u32 queueIndex = 0;
+        bool rejected = false;
+        bool queued = false;
+        {
+            std::lock_guard<std::mutex> lock(m_lifecycleMutex);
+            if (!m_running.load(std::memory_order_acquire) || m_queues.empty()) {
+                rejected = true;
+            } else {
+                const u32 queueCount = static_cast<u32>(m_queues.size());
+                queueIndex = t_workerIndex % queueCount;
+                if (counter) counter->Increment();
+                if (m_queues[queueIndex].Push(job)) {
+                    payload.release();
+                    queued = true;
+                } else if (counter) {
+                    counter->Decrement();
+                }
+            }
+        }
 
-    const u32 queueIdx = t_workerIndex % static_cast<u32>(m_queues.size());
-    while (!m_queues[queueIdx].Push(job)) {
-        ExecuteNextJob(queueIdx);
+        if (rejected || queued) {
+            FinishQueueUse();
+            return queued;
+        }
+
+        if (!ExecuteNextJob(queueIndex)) std::this_thread::yield();
     }
+}
+
+bool JobSystem::BeginQueueUse() noexcept {
+    std::lock_guard<std::mutex> lock(m_lifecycleMutex);
+    if (!m_running.load(std::memory_order_acquire) || m_queues.empty()) return false;
+    ++m_activeQueueUsers;
+    return true;
+}
+
+void JobSystem::FinishQueueUse() noexcept {
+    {
+        std::lock_guard<std::mutex> lock(m_lifecycleMutex);
+        if (m_activeQueueUsers > 0) --m_activeQueueUsers;
+    }
+    m_lifecycleChanged.notify_all();
 }
 
 void JobSystem::ParallelFor(
@@ -160,64 +214,71 @@ void JobSystem::ParallelFor(
     if (totalCount == 0 || !function) return;
     batchSize = std::max(1U, batchSize);
 
-    const u32 numBatches = (totalCount + batchSize - 1) / batchSize;
-    if (counter) {
-        counter->Increment(numBatches);
+    const bool ownsQueueUse = BeginQueueUse();
+    if (!ownsQueueUse) {
+        for (u32 index = 0; index < totalCount; ++index) function(index, data);
+        return;
     }
 
-    const u32 queueIdx = t_workerIndex % static_cast<u32>(m_queues.size());
-    for (u32 b = 0; b < numBatches; ++b) {
-        const u32 start = b * batchSize;
-        const u32 end = std::min(start + batchSize, totalCount);
-
-        auto* payload = new ParallelForPayload{function, data, start, end, counter};
-        Job job{ParallelForBatchCallback, payload};
-
-        while (!m_queues[queueIdx].Push(job)) {
-            ExecuteNextJob(queueIdx);
+    const u32 numBatches = 1 + (totalCount - 1) / batchSize;
+    for (u32 batch = 0; batch < numBatches; ++batch) {
+        const u32 start = batch * batchSize;
+        const u32 end = start + std::min(batchSize, totalCount - start);
+        auto payload = std::make_unique<ParallelForPayload>(ParallelForPayload{function, data, start, end, counter});
+        if (counter) counter->Increment();
+        if (SubmitJob(ParallelForBatchCallback, payload.get())) {
+            payload.release();
+            continue;
         }
+        if (counter) counter->Decrement();
+
+        // If shutdown starts between batches, finish this batch synchronously.
+        for (u32 index = start; index < end; ++index) function(index, data);
     }
+    FinishQueueUse();
 }
 
 void JobSystem::WaitForCounter(JobCounter* counter) {
     if (!counter) return;
-
+    const bool ownsQueueUse = BeginQueueUse();
+    const bool workerMayDrain = ownsQueueUse || t_workerIndex != 0;
     while (!counter->IsComplete()) {
-        if (!ExecuteNextJob(t_workerIndex)) {
-            std::this_thread::yield();
-        }
+        if (!workerMayDrain || !ExecuteNextJob(t_workerIndex)) std::this_thread::yield();
     }
+    if (ownsQueueUse) FinishQueueUse();
+}
+
+u32 JobSystem::GetWorkerCount() const noexcept {
+    std::lock_guard<std::mutex> lock(m_lifecycleMutex);
+    return static_cast<u32>(m_workers.size());
 }
 
 void JobSystem::WorkerLoop(u32 workerIndex) {
     t_workerIndex = workerIndex;
-
-    while (m_running.load(std::memory_order_acquire)) {
-        if (!ExecuteNextJob(workerIndex)) {
-            std::this_thread::yield();
-        }
+    while (true) {
+        if (ExecuteNextJob(workerIndex)) continue;
+        if (!m_running.load(std::memory_order_acquire)) break;
+        std::this_thread::yield();
     }
 }
 
 bool JobSystem::ExecuteNextJob(u32 workerIndex) {
     Job job;
+    const u32 queueCount = static_cast<u32>(m_queues.size());
+    if (queueCount == 0) return false;
 
-    // 1. Try to pop from own queue (LIFO)
-    if (workerIndex < m_queues.size() && m_queues[workerIndex].Pop(job)) {
+    if (workerIndex < queueCount && m_queues[workerIndex].Pop(job)) {
         job.function(job.data);
         return true;
     }
 
-    // 2. Steal from other queues (FIFO)
-    const u32 queueCount = static_cast<u32>(m_queues.size());
-    for (u32 i = 0; i < queueCount; ++i) {
-        const u32 victim = (workerIndex + i + 1) % queueCount;
+    for (u32 offset = 1; offset < queueCount; ++offset) {
+        const u32 victim = (workerIndex + offset) % queueCount;
         if (m_queues[victim].Steal(job)) {
             job.function(job.data);
             return true;
         }
     }
-
     return false;
 }
 

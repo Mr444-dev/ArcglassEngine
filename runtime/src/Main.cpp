@@ -1,7 +1,6 @@
 #include "engine/core/BaseTypes.h"
 #include "engine/core/Log.h"
 #include "engine/core/Profiler.h"
-#include "engine/core/Allocators.h"
 #include "engine/core/JobSystem.h"
 #include "engine/platform/Platform.h"
 #include "engine/platform/Window.h"
@@ -9,15 +8,8 @@
 #include "engine/rhi/RHI.h"
 #include "engine/rhi/RHIDevice.h"
 #include "engine/renderer/Camera.h"
-#include "engine/renderer/RenderGraph.h"
 #include "engine/renderer/MaterialSystem.h"
 #include "engine/renderer/DebugRenderer.h"
-#include "engine/renderer/passes/DepthPrepass.h"
-#include "engine/renderer/passes/LightingPass.h"
-#include "engine/renderer/passes/PostProcessPass.h"
-#include "engine/renderer/passes/VolumetricFogPass.h"
-#include "engine/renderer/VoxelGlobalIllumination.h"
-#include "engine/renderer/NeuralRadianceCache.h"
 #include "engine/renderer/WorldStreaming.h"
 #include <chrono>
 #include <cmath>
@@ -161,12 +153,7 @@ int main(int argc, char* argv[]) {
     ENGINE_VERIFY(scenePso != nullptr, "Failed to create Runtime Scene Graphics PSO");
 
     // Next-Gen Renderer Subsystem Instances
-    NeuralRadianceCache nrc;
     TerrainClipmap terrainClipmap(1.0f, 32.0f);
-    VirtualTextureManager svtManager;
-
-    FrameAllocator frameAlloc(4 * MB);
-    RenderGraph renderGraph;
 
     ENGINE_LOG_INFO("Engine initialized. Controls: WASD to move, Space/Ctrl for Up/Down, Hold RMB to look, ESC to exit.");
 
@@ -183,7 +170,6 @@ int main(int argc, char* argv[]) {
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             continue;
         }
-        frameAlloc.BeginFrame();
 
         if (Platform::Input::Get().IsKeyDown(Platform::KeyCode::Escape)) {
             break;
@@ -272,8 +258,8 @@ int main(int argc, char* argv[]) {
 
             char titleBuffer[256];
             snprintf(titleBuffer, sizeof(titleBuffer),
-                "Arcglass Runtime | %.0f FPS (%.2f ms) | Cam: [%.1f, %.1f, %.1f] | Active Passes: %zu",
-                fps, ms, camPos.x, camPos.y, camPos.z, renderGraph.GetCompiledPassCount());
+                "Arcglass Runtime | %.0f FPS (%.2f ms) | Cam: [%.1f, %.1f, %.1f] | Direct D3D12 path",
+                fps, ms, camPos.x, camPos.y, camPos.z);
             window.SetTitle(titleBuffer);
 
             fpsTimer = 0.0f;
@@ -309,71 +295,9 @@ int main(int argc, char* argv[]) {
         const Vec3 ring0Center{levels[0].centerOffset.x, 0.1f, levels[0].centerOffset.y};
         debugRenderer.AddSphere(ring0Center, 0.5f, yellow, 8);
 
-        // --- RenderGraph Frame Setup & Execution ---
         RHITexture* backBuffer = swapChain->GetCurrentBackBuffer();
         if (!backBuffer) continue;
-
-        renderGraph.Reset();
-
-        // 1. External Output Sink (BackBuffer)
-        RGTextureHandle backBufferHandle = renderGraph.ImportTexture("SwapChainBackBuffer", backBuffer, ResourceState::Common);
-        renderGraph.MarkOutput(backBufferHandle);
-
-        // 2. Declare Deferred & Next-Gen G-Buffer Targets
-        RGTextureDesc depthDesc{winDesc.width, winDesc.height, Format::D32_FLOAT, TextureUsage::DepthStencil, "GBufferDepth"};
-        RGTextureHandle depthBuffer = renderGraph.DeclareTexture("GBufferDepth", depthDesc);
-
-        RGTextureDesc normalDesc{winDesc.width, winDesc.height, Format::RGBA16_FLOAT, TextureUsage::RenderTarget | TextureUsage::ShaderResource, "GBufferNormal"};
-        RGTextureHandle normalBuffer = renderGraph.DeclareTexture("GBufferNormal", normalDesc);
-
-        RGTextureDesc hdrDesc{winDesc.width, winDesc.height, Format::RGBA16_FLOAT, TextureUsage::RenderTarget | TextureUsage::ShaderResource, "HDRSceneColor"};
-        RGTextureHandle hdrColor = renderGraph.DeclareTexture("HDRSceneColor", hdrDesc);
-
-        // 3. Volumetric Fog Froxel Grid Target
-        RGTextureDesc fogDesc{160, 90, Format::RGBA16_FLOAT, TextureUsage::RenderTarget | TextureUsage::ShaderResource, "VolumetricFogVolume"};
-        RGTextureHandle fogVolume = renderGraph.DeclareTexture("VolumetricFogVolume", fogDesc);
-
-        // 4. Voxel Global Illumination 3D Radiance Target
-        RGTextureDesc voxel3DDesc{128, 128, Format::RGBA16_FLOAT, TextureUsage::RenderTarget | TextureUsage::ShaderResource, "VoxelRadiance3D"};
-        RGTextureHandle voxelRadiance3D = renderGraph.DeclareTexture("VoxelRadiance3D", voxel3DDesc);
-
-        RGTextureDesc indirectDiffuseDesc{winDesc.width, winDesc.height, Format::RGBA16_FLOAT, TextureUsage::RenderTarget | TextureUsage::ShaderResource, "VoxelIndirectDiffuse"};
-        RGTextureHandle indirectDiffuse = renderGraph.DeclareTexture("VoxelIndirectDiffuse", indirectDiffuseDesc);
-
-        // 5. Neural Radiance Cache Output Target
-        RGTextureDesc nrcDesc{winDesc.width, winDesc.height, Format::RGBA16_FLOAT, TextureUsage::RenderTarget | TextureUsage::ShaderResource, "NRCIndirectLight"};
-        RGTextureHandle nrcIndirect = renderGraph.DeclareTexture("NRCIndirectLight", nrcDesc);
-
-        // 6. Terrain Clipmap Heightmap & Scene Surface Output Target
-        RGTextureDesc heightDesc{1024, 1024, Format::R32_FLOAT, TextureUsage::ShaderResource, "TerrainHeightmap"};
-        RGTextureHandle terrainHeight = renderGraph.DeclareTexture("TerrainHeightmap", heightDesc);
-
-        RGTextureDesc terrainOutDesc{winDesc.width, winDesc.height, Format::RGBA8_UNORM, TextureUsage::RenderTarget | TextureUsage::ShaderResource, "TerrainSceneColor"};
-        RGTextureHandle terrainOutput = renderGraph.DeclareTexture("TerrainSceneColor", terrainOutDesc);
-
-        // --- Schedule RenderGraph Passes ---
-        DepthPrepass::AddToGraph(renderGraph, depthBuffer);
-        VolumetricFogPass::AddToGraph(renderGraph, depthBuffer, fogVolume);
-
-        VoxelGIConfig voxelConfig{};
-        voxelConfig.volumeResolution = 128;
-        voxelConfig.volumeWorldExtent = 64.0f;
-        VoxelGlobalIllumination::AddToGraph(renderGraph, normalBuffer, depthBuffer, voxelRadiance3D, indirectDiffuse, voxelConfig);
-
-        nrc.AddToGraph(renderGraph, normalBuffer, depthBuffer, nrcIndirect);
-        VirtualTextureManager::AddToGraph(renderGraph, depthBuffer, terrainHeight, terrainOutput);
-
-        LightingPass::AddToGraph(renderGraph, depthBuffer, hdrColor);
-        PostProcessPass::AddToGraph(renderGraph, hdrColor, backBufferHandle);
-
-        // Compile Graph (DAG topological sort, barrier generation, pass scheduling)
-        if (!renderGraph.IsCompiled()) {
-            ENGINE_VERIFY(renderGraph.Compile(), "RenderGraph compilation failed");
-        }
-
-        // Record and Execute Command List on GPU
         cmdList->Reset(scenePso.get());
-        renderGraph.Execute(*cmdList);
         debugRenderer.Flush(*cmdList, camera);
 
         // Render full interactive 3D perspective world to back buffer
@@ -426,7 +350,6 @@ int main(int argc, char* argv[]) {
 
     debugRenderer.Shutdown();
     materialSystem.Shutdown();
-    renderGraph.Reset();
 
     cmdList.reset();
     swapChain.reset();

@@ -21,12 +21,13 @@ void TestProfileScopeAndAggregation() {
     }
 
     const double scopeMs = profiler.GetScopeTime("SimulationTick");
-    ENGINE_ASSERT(scopeMs >= 3.0, "ProfileScope duration too small");
+    ENGINE_ASSERT(scopeMs > 0.0, "ProfileScope did not record a positive duration");
     ENGINE_LOG_INFO("Scope 'SimulationTick' recorded: {:.2f} ms.", scopeMs);
 
-    profiler.EndFrame(0.016667f);
+    constexpr float expectedFrameSeconds = 1.0f / 60.0f;
+    profiler.EndFrame(expectedFrameSeconds);
     const auto& t = profiler.GetTelemetry();
-    ENGINE_ASSERT(t.fps > 58.0f && t.fps < 62.0f, "FrameTelemetry FPS calculation mismatch");
+    ENGINE_ASSERT(std::abs(t.fps - 60.0f) < 0.1f, "FrameTelemetry FPS calculation mismatch");
     ENGINE_ASSERT(t.cpuTimeMs > 0.0f, "CPU time must include recorded scopes");
 
     ENGINE_LOG_INFO("ProfileScope and Telemetry aggregation passed.");

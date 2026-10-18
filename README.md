@@ -4,7 +4,7 @@
 
 Arcglass Engine is a Windows game-engine prototype written in C++20. It contains a Direct3D 12 rendering interface, engine subsystems, a small custom editor, a standalone runtime, and a native test executable.
 
-This repository is a learning and portfolio project, not a production-ready engine. The editor and runtime start on the verified Windows development machine. Many engine modules have unit-level checks, but they are not all connected into a complete end-to-end game pipeline.
+This repository is a learning and portfolio project, not a production-ready engine. The last successful build and startup checks recorded below predate recent reliability changes, so current editor/runtime behavior is not confirmed. Many engine modules have unit-level checks, but they are not all connected into a complete end-to-end game pipeline.
 
 [![Windows CI](https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml/badge.svg)](https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml)
 
@@ -12,7 +12,7 @@ This repository is a learning and portfolio project, not a production-ready engi
 
 A game engine needs clear boundaries between platform services, rendering, world data, assets, and tools. This project explores those boundaries in native C++ and keeps the verified Windows graphics path distinct from modules that remain experiments.
 
-## Verified on this revision
+## Earlier verification (2026-10-06, before the reliability fixes)
 
 Checks run from the renamed `ArcglassEngine` checkout on 2026-10-06:
 
@@ -24,7 +24,7 @@ Checks run from the renamed `ArcglassEngine` checkout on 2026-10-06:
 - The editor/runtime executables and their shader outputs were generated in the fresh build directory. The icons are embedded in the executables; there are no runtime icon-file dependencies.
 - Earlier local graphics checks used an NVIDIA GeForce GTX 1660 SUPER with about 6 GB dedicated VRAM. Other adapters have not been tested.
 
-The checkout does not track executables. Fresh binaries are generated under the ignored `build/arcglass-msvc-release/bin/` directory. Historical binaries at the repository root are stale local artifacts and must not be published. CI rebuilds from source; no binary release is claimed.
+These are historical results from before the reliability fixes in this revision; they do not verify the current source. The checkout does not track executables. Fresh binaries are generated under the ignored `build/arcglass-msvc-release/bin/` directory. Historical binaries at the repository root are stale local artifacts and must not be published. CI rebuilds from source; no binary release is claimed.
 ## Engineering Highlights
 
 - C++20 CMake project split into core, platform, RHI, world, asset, renderer, physics, animation, audio, networking, runtime, and editor targets.
@@ -32,7 +32,7 @@ The checkout does not track executables. Fresh binaries are generated under the 
 - Direct3D 12 device, descriptor heaps, command lists, textures, swap chain, and shader compilation.
 - Core allocators, job system, logging, and profiling utilities.
 - Entity/component world, transform hierarchy, spatial BVH, asset virtual file system, and mesh/texture cooking.
-- CPU-side physics, animation, audio, render-graph, streaming, and renderer utilities with unit-level checks.
+- CPU-side physics, animation, audio, streaming, and renderer utilities with unit-level checks. RenderGraph remains an isolated experiment and is not used by the runtime.
 - A small editor with a custom HLSL-rendered interface, an embedded Inter bitmap atlas with proportional advances, generated Arcglass brand mark, selectable scene objects, transform controls, scene files, and a filesystem-backed asset browser. Its ray-cast viewport previews a procedural sky/cloud layer, directional lighting, approximate shadows, and an analytic height field; see [rendering preview details](docs/RENDERING_PREVIEW.md).
 - A standalone interactive runtime sample.
 
@@ -42,11 +42,12 @@ The checkout does not track executables. Fresh binaries are generated under the 
 - The editor remains an early scene-editing prototype. Its interface is a custom full-screen HLSL canvas, not a mature docking UI; there is no project/workspace format, format-specific asset importer, thumbnail preview, material editor, or finished content pipeline. The asset browser lists files and copies selected local files into `assets/`; it does not validate, cook, or convert their contents. The terrain and lighting effects are viewport approximations rather than mesh-based RenderGraph features. Scene documents use the small `.arcscene` format; legacy `.mgescene` files remain loadable.
 - The runtime is a graphics/input sample, not a complete game.
 - Several renderer features exist as isolated C++ modules, shaders, or CPU-side tests. The runtime does not demonstrate the GPU-driven meshlet/HZB, ray-tracing, neural-radiance-cache, volumetric, or virtual-texture pipeline end to end.
+- RenderGraph is intentionally not part of the runtime render path. Its current tests cover CPU-side scheduling analysis only; they do not validate GPU resource allocation, aliasing, barriers, or rendered output.
 - The DirectStorage manager is a CPU-only queue-lifecycle simulator. It does not read files, call DirectStorage, decompress GDeflate, write VRAM, or measure bandwidth. `shaders/compute/GDeflateDecompress.hlsl` is an unused experimental scaffold, not a working decoder.
 - Vulkan headers and Linux/deployment files are exploratory scaffolding; only the Windows Direct3D 12 build and test path has been verified here.
 - Performance values in historical planning documents have not been reproduced as benchmarks and are not presented as current results.
-- One CTest test is registered; it invokes a larger executable containing multiple internal checks. This is not complete subsystem coverage.
-- No license file is present. Add a license you choose before publishing publicly.
+- CTest registers one CPU subsystem suite and one hardware-dependent D3D12 smoke test. CI runs the CPU suite; the GPU test must be selected explicitly on a machine with a supported adapter.
+- The code is licensed under MIT. The bundled Inter font is separately licensed under SIL OFL 1.1; see `third_party/fonts/Inter/OFL.txt`.
 
 ## My Contribution
 
@@ -81,7 +82,7 @@ The diagram shows build dependencies, not a promise that every subsystem partici
 - Visual Studio C++ build tools with MSVC and a Windows SDK.
 - CMake 3.28 or newer.
 - Ninja.
-- A Direct3D 12 capable GPU and driver exposing feature level 12.0 for the graphics test and editor.
+- A Direct3D 12 capable GPU and driver exposing feature level 12.0 to run the editor, runtime, or hardware smoke test. The CPU test suite does not require a GPU.
 - Windows SDK `fxc.exe` (used to precompile the editor and runtime shaders during the CMake build).
 
 The verified local run used an NVIDIA GeForce GTX 1660 SUPER. Other adapters have not been tested. The repository does not currently provide a verified Linux/Vulkan build.
@@ -93,7 +94,13 @@ Run from a Visual Studio Developer Command Prompt (x64), or after initializing t
 ~~~cmd
 cmake --preset windows-msvc-release
 cmake --build --preset windows-msvc-release --parallel
-ctest --test-dir build/arcglass-msvc-release -C RelWithDebInfo --output-on-failure
+ctest --test-dir build/arcglass-msvc-release -C RelWithDebInfo -LE gpu --output-on-failure
+~~~
+
+The D3D12 smoke test is hardware-dependent and excluded from the CI CPU test command. Run it explicitly on a supported Windows GPU:
+
+~~~cmd
+ctest --test-dir build/arcglass-msvc-release -C RelWithDebInfo -L gpu --output-on-failure
 ~~~
 
 Launch the built editor or runtime:
@@ -155,7 +162,7 @@ The custom editor and standalone runtime are separate applications over shared e
 
 ### Native subsystem tests
 
-Subsystem checks are collected in the native test executable and CTest target. The current CTest registration runs one test target; its internal checks include graphics initialization, but it is not a comprehensive end-to-end game suite.
+CPU subsystem checks run in `Engine_Tests`. Direct3D 12 device, swap-chain, shader, and presentation checks run separately in `Engine_RHI_Smoke`, labeled `gpu` in CTest. Neither suite is comprehensive end-to-end game coverage.
 
 ## Design Decisions and Trade-offs
 
@@ -167,6 +174,10 @@ Subsystem checks are collected in the native test executable and CTest target. T
 ## Portfolio status
 
 The strongest verified material is the C++20 module structure, Direct3D 12 device/swap-chain path, engine-side data structures, and repeatable Windows CI. Present renderer features as experiments or work in progress until they are rendered by the runtime and captured in a reproducible demo.
+
+## License
+
+The Arcglass Engine source code is distributed under the MIT License. The bundled Inter font remains under its upstream SIL Open Font License 1.1; its license is included alongside the font.
 
 
 ## What This Project Demonstrates

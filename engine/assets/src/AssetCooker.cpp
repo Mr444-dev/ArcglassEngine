@@ -1,64 +1,102 @@
 #include "engine/assets/AssetCooker.h"
 #include "engine/assets/VirtualFileSystem.h"
 #include "engine/core/Log.h"
-#include "engine/core/Assert.h"
-#include <cstring>
+#include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <limits>
+#include <utility>
 
 namespace Engine::Assets {
+namespace {
+
+bool AddSize(size_t& total, size_t amount) noexcept {
+    if (amount > std::numeric_limits<size_t>::max() - total) return false;
+    total += amount;
+    return true;
+}
+
+bool MultiplySize(size_t count, size_t elementSize, size_t& result) noexcept {
+    if (elementSize != 0 && count > std::numeric_limits<size_t>::max() / elementSize) return false;
+    result = count * elementSize;
+    return true;
+}
+
+bool IsFinite(const Core::Vec3& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+} // namespace
 
 std::vector<MeshletDescriptor> AssetCooker::GenerateMeshlets(
     const std::vector<MeshVertex>& vertices,
     const std::vector<Core::u32>& indices
 ) {
     std::vector<MeshletDescriptor> meshlets;
-    if (indices.empty()) return meshlets;
+    if (indices.empty() || indices.size() % 3 != 0) return meshlets;
 
-    constexpr Core::u32 MAX_VERTICES_PER_MESHLET = 64;
-    constexpr Core::u32 MAX_TRIANGLES_PER_MESHLET = 126;
-    (void)MAX_VERTICES_PER_MESHLET;
-
+    constexpr Core::u32 MaxVerticesPerMeshlet = 64;
+    constexpr Core::u32 MaxTrianglesPerMeshlet = 126;
     const size_t triangleCount = indices.size() / 3;
-    meshlets.reserve(triangleCount / MAX_TRIANGLES_PER_MESHLET + 1);
+    meshlets.reserve((triangleCount + MaxTrianglesPerMeshlet - 1) / MaxTrianglesPerMeshlet);
 
-    for (size_t t = 0; t < triangleCount; t += MAX_TRIANGLES_PER_MESHLET) {
-        const size_t batchTris = std::min<size_t>(MAX_TRIANGLES_PER_MESHLET, triangleCount - t);
+    size_t firstTriangle = 0;
+    while (firstTriangle < triangleCount) {
+        const size_t batchStart = firstTriangle;
+        Core::u32 minVertex = std::numeric_limits<Core::u32>::max();
+        Core::u32 maxVertex = 0;
 
-        MeshletDescriptor m{};
-        m.triangleOffset = static_cast<Core::u32>(t * 3);
-        m.triangleCount = static_cast<Core::u32>(batchTris);
+        while (firstTriangle < triangleCount && firstTriangle - batchStart < MaxTrianglesPerMeshlet) {
+            Core::u32 triangleMin = std::numeric_limits<Core::u32>::max();
+            Core::u32 triangleMax = 0;
+            for (size_t corner = 0; corner < 3; ++corner) {
+                const Core::u32 index = indices[firstTriangle * 3 + corner];
+                triangleMin = std::min(triangleMin, index);
+                triangleMax = std::max(triangleMax, index);
+            }
 
-        // Find min and max vertex indices in this triangle batch
-        Core::u32 minV = 0xFFFFFFFF;
-        Core::u32 maxV = 0;
+            const Core::u32 nextMin = std::min(minVertex, triangleMin);
+            const Core::u32 nextMax = std::max(maxVertex, triangleMax);
+            if (static_cast<Core::u64>(nextMax) - nextMin + 1 > MaxVerticesPerMeshlet) {
+                break;
+            }
+
+            minVertex = nextMin;
+            maxVertex = nextMax;
+            ++firstTriangle;
+        }
+
+        if (firstTriangle == batchStart) {
+            ENGINE_LOG_ERROR("AssetCooker: A triangle spans more than {} contiguous vertices; meshlet format cannot represent it.", MaxVerticesPerMeshlet);
+            return {};
+        }
+
+        MeshletDescriptor meshlet{};
+        meshlet.vertexOffset = minVertex;
+        meshlet.vertexCount = maxVertex - minVertex + 1;
+        meshlet.triangleOffset = static_cast<Core::u32>(batchStart * 3);
+        meshlet.triangleCount = static_cast<Core::u32>(firstTriangle - batchStart);
+
         Core::Vec3 center{0.0f, 0.0f, 0.0f};
+        const size_t firstIndex = batchStart * 3;
+        const size_t indexCount = (firstTriangle - batchStart) * 3;
+        for (size_t i = 0; i < indexCount; ++i) {
+            center = center + vertices[indices[firstIndex + i]].position;
+        }
+        center = center * (1.0f / static_cast<float>(indexCount));
 
-        for (size_t i = 0; i < batchTris * 3; ++i) {
-            Core::u32 idx = indices[m.triangleOffset + i];
-            minV = std::min(minV, idx);
-            maxV = std::max(maxV, idx);
-            center = center + vertices[idx].position;
+        float maxRadiusSquared = 0.0f;
+        for (size_t i = 0; i < indexCount; ++i) {
+            const Core::Vec3 delta = vertices[indices[firstIndex + i]].position - center;
+            const float radiusSquared = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+            maxRadiusSquared = std::max(maxRadiusSquared, radiusSquared);
         }
 
-        const float invCount = 1.0f / static_cast<float>(batchTris * 3);
-        center = center * invCount;
-
-        // Calculate bounding sphere radius
-        float maxRadiusSq = 0.0f;
-        for (size_t i = 0; i < batchTris * 3; ++i) {
-            Core::u32 idx = indices[m.triangleOffset + i];
-            Core::Vec3 diff = vertices[idx].position - center;
-            maxRadiusSq = std::max(maxRadiusSq, diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
-        }
-
-        m.vertexOffset = minV;
-        m.vertexCount = (maxV >= minV) ? (maxV - minV + 1) : 0;
-        m.boundingSphere[0] = center.x;
-        m.boundingSphere[1] = center.y;
-        m.boundingSphere[2] = center.z;
-        m.boundingSphere[3] = std::sqrt(maxRadiusSq);
-
-        meshlets.push_back(m);
+        meshlet.boundingSphere[0] = center.x;
+        meshlet.boundingSphere[1] = center.y;
+        meshlet.boundingSphere[2] = center.z;
+        meshlet.boundingSphere[3] = std::sqrt(maxRadiusSquared);
+        meshlets.push_back(meshlet);
     }
 
     return meshlets;
@@ -70,34 +108,46 @@ bool AssetCooker::CookMesh(
     const std::string& outVirtualPath,
     AssetGUID guid
 ) {
-    if (vertices.empty() || indices.empty()) {
-        ENGINE_LOG_ERROR("AssetCooker: Cannot cook empty mesh geometry");
+    constexpr size_t MaxSerializedCount = std::numeric_limits<Core::u32>::max();
+    if (vertices.empty() || indices.empty() || indices.size() % 3 != 0 ||
+        vertices.size() > MaxSerializedCount || indices.size() > MaxSerializedCount) {
+        ENGINE_LOG_ERROR("AssetCooker: Mesh must contain representable vertices and a non-empty triangle index list.");
         return false;
     }
 
-    // 1. Compute bounding AABB
-    Core::AABB totalBounds;
-    totalBounds.min = vertices[0].position;
-    totalBounds.max = vertices[0].position;
-    for (const auto& v : vertices) {
-        totalBounds.Encapsulate(Core::AABB{v.position, v.position});
+    for (const auto& vertex : vertices) {
+        if (!IsFinite(vertex.position) || !IsFinite(vertex.normal) ||
+            !std::isfinite(vertex.tangent[0]) || !std::isfinite(vertex.tangent[1]) ||
+            !std::isfinite(vertex.tangent[2]) || !std::isfinite(vertex.tangent[3]) ||
+            !std::isfinite(vertex.uv[0]) || !std::isfinite(vertex.uv[1])) {
+            ENGINE_LOG_ERROR("AssetCooker: Mesh contains a non-finite vertex attribute.");
+            return false;
+        }
+    }
+    for (const Core::u32 index : indices) {
+        if (index >= vertices.size()) {
+            ENGINE_LOG_ERROR("AssetCooker: Mesh index {} is outside the {}-vertex array.", index, vertices.size());
+            return false;
+        }
     }
 
-    // 2. Generate modern meshlets
-    std::vector<MeshletDescriptor> meshlets = GenerateMeshlets(vertices, indices);
+    Core::AABB totalBounds{vertices.front().position, vertices.front().position};
+    for (const auto& vertex : vertices) {
+        totalBounds.Encapsulate(Core::AABB{vertex.position, vertex.position});
+    }
 
-    // 3. Prepare Submesh
+    std::vector<MeshletDescriptor> meshlets = GenerateMeshlets(vertices, indices);
+    if (meshlets.empty() || meshlets.size() > MaxSerializedCount) {
+        ENGINE_LOG_ERROR("AssetCooker: Failed to generate representable meshlets.");
+        return false;
+    }
+
     SubmeshDescriptor submesh{};
-    submesh.vertexOffset = 0;
     submesh.vertexCount = static_cast<Core::u32>(vertices.size());
-    submesh.indexOffset = 0;
     submesh.indexCount = static_cast<Core::u32>(indices.size());
-    submesh.meshletOffset = 0;
     submesh.meshletCount = static_cast<Core::u32>(meshlets.size());
-    submesh.materialIndex = 0;
     submesh.aabb = totalBounds;
 
-    // 4. Construct Header
     MeshFileHeader header{};
     header.commonHeader.magic = CMESH_MAGIC;
     header.commonHeader.version = 1;
@@ -108,39 +158,42 @@ bool AssetCooker::CookMesh(
     header.totalMeshletCount = static_cast<Core::u32>(meshlets.size());
     header.totalBounds = totalBounds;
 
-    const size_t headerSize = sizeof(MeshFileHeader);
-    const size_t submeshSize = sizeof(SubmeshDescriptor);
-    const size_t meshletSize = sizeof(MeshletDescriptor) * meshlets.size();
-    const size_t vertexSize = sizeof(MeshVertex) * vertices.size();
-    const size_t indexSize = sizeof(Core::u32) * indices.size();
-    const size_t totalBytes = headerSize + submeshSize + meshletSize + vertexSize + indexSize;
-
-    header.commonHeader.uncompressedSize = totalBytes;
-
-    // 5. Serialize into contiguous memory block
-    std::vector<Core::u8> buffer(totalBytes);
-    Core::u8* ptr = buffer.data();
-
-    std::memcpy(ptr, &header, headerSize); ptr += headerSize;
-    std::memcpy(ptr, &submesh, submeshSize); ptr += submeshSize;
-    if (!meshlets.empty()) {
-        std::memcpy(ptr, meshlets.data(), meshletSize); ptr += meshletSize;
-    }
-    std::memcpy(ptr, vertices.data(), vertexSize); ptr += vertexSize;
-    std::memcpy(ptr, indices.data(), indexSize);
-
-    // 6. Write through VFS
-    if (!VirtualFileSystem::Get().WriteFile(outVirtualPath, buffer.data(), buffer.size())) {
-        ENGINE_LOG_ERROR("AssetCooker: Failed writing cooked mesh to '{}'", outVirtualPath);
+    size_t meshletSize = 0;
+    size_t vertexSize = 0;
+    size_t indexSize = 0;
+    if (!MultiplySize(meshlets.size(), sizeof(MeshletDescriptor), meshletSize) ||
+        !MultiplySize(vertices.size(), sizeof(MeshVertex), vertexSize) ||
+        !MultiplySize(indices.size(), sizeof(Core::u32), indexSize)) {
+        ENGINE_LOG_ERROR("AssetCooker: Mesh serialization size overflow.");
         return false;
     }
 
-    // 7. Register in Database
-    AssetMetadata meta{};
-    meta.guid = guid;
-    meta.cookedPath = outVirtualPath;
-    meta.assetType = "Mesh";
-    AssetDatabase::Get().RegisterAsset(meta);
+    size_t totalBytes = sizeof(MeshFileHeader);
+    if (!AddSize(totalBytes, sizeof(SubmeshDescriptor)) || !AddSize(totalBytes, meshletSize) ||
+        !AddSize(totalBytes, vertexSize) || !AddSize(totalBytes, indexSize)) {
+        ENGINE_LOG_ERROR("AssetCooker: Mesh serialization size overflow.");
+        return false;
+    }
+    header.commonHeader.uncompressedSize = totalBytes;
+
+    std::vector<Core::u8> buffer(totalBytes);
+    Core::u8* cursor = buffer.data();
+    std::memcpy(cursor, &header, sizeof(header)); cursor += sizeof(header);
+    std::memcpy(cursor, &submesh, sizeof(submesh)); cursor += sizeof(submesh);
+    std::memcpy(cursor, meshlets.data(), meshletSize); cursor += meshletSize;
+    std::memcpy(cursor, vertices.data(), vertexSize); cursor += vertexSize;
+    std::memcpy(cursor, indices.data(), indexSize);
+
+    if (!VirtualFileSystem::Get().WriteFile(outVirtualPath, buffer.data(), buffer.size())) {
+        ENGINE_LOG_ERROR("AssetCooker: Failed writing cooked mesh to '{}'.", outVirtualPath);
+        return false;
+    }
+
+    AssetMetadata metadata{};
+    metadata.guid = guid;
+    metadata.cookedPath = outVirtualPath;
+    metadata.assetType = "Mesh";
+    AssetDatabase::Get().RegisterAsset(metadata);
 
     ENGINE_LOG_INFO("AssetCooker: Cooked mesh '{}' ({} verts, {} tris, {} meshlets, {:.2f} KB)",
         outVirtualPath, vertices.size(), indices.size() / 3, meshlets.size(), totalBytes / 1024.0f);
@@ -151,10 +204,22 @@ bool AssetCooker::CookTexture(
     Core::u32 width,
     Core::u32 height,
     const Core::u8* rgbaPixels,
+    size_t rgbaByteCount,
     const std::string& outVirtualPath,
     AssetGUID guid
 ) {
-    if (width == 0 || height == 0 || !rgbaPixels) return false;
+    constexpr Core::u32 MaxTextureDimension = 16384;
+    if (width == 0 || height == 0 || width > MaxTextureDimension || height > MaxTextureDimension || !rgbaPixels) {
+        ENGINE_LOG_ERROR("AssetCooker: Invalid or unsupported texture dimensions {}x{}.", width, height);
+        return false;
+    }
+
+    const Core::u64 expectedByteCount64 = static_cast<Core::u64>(width) * height * 4;
+    if (expectedByteCount64 > std::numeric_limits<size_t>::max() ||
+        rgbaByteCount != static_cast<size_t>(expectedByteCount64)) {
+        ENGINE_LOG_ERROR("AssetCooker: RGBA input byte count does not match {}x{} texture dimensions.", width, height);
+        return false;
+    }
 
     TextureFileHeader header{};
     header.commonHeader.magic = CTEX_MAGIC;
@@ -165,37 +230,33 @@ bool AssetCooker::CookTexture(
     header.depth = 1;
     header.format = TextureCompressionFormat::RGBA8_UNORM;
 
-    // Generate MIP chain
     std::vector<std::vector<Core::u8>> mipData;
     Core::u32 currentW = width;
     Core::u32 currentH = height;
-
-    // Mip 0 (original)
-    const size_t mip0Size = width * height * 4;
-    mipData.emplace_back(rgbaPixels, rgbaPixels + mip0Size);
+    mipData.emplace_back(rgbaPixels, rgbaPixels + rgbaByteCount);
 
     while (currentW > 1 || currentH > 1) {
         const Core::u32 nextW = std::max(1u, currentW / 2);
         const Core::u32 nextH = std::max(1u, currentH / 2);
-        const auto& prevPixels = mipData.back();
+        const auto& previous = mipData.back();
+        std::vector<Core::u8> nextPixels(static_cast<size_t>(nextW) * nextH * 4);
 
-        std::vector<Core::u8> nextPixels(nextW * nextH * 4);
-
-        // 2x2 box filter
         for (Core::u32 y = 0; y < nextH; ++y) {
+            const Core::u32 yStart = static_cast<Core::u32>(static_cast<Core::u64>(y) * currentH / nextH);
+            const Core::u32 yEnd = static_cast<Core::u32>(static_cast<Core::u64>(y + 1) * currentH / nextH);
             for (Core::u32 x = 0; x < nextW; ++x) {
-                const Core::u32 srcX0 = x * 2;
-                const Core::u32 srcX1 = std::min(srcX0 + 1, currentW - 1);
-                const Core::u32 srcY0 = y * 2;
-                const Core::u32 srcY1 = std::min(srcY0 + 1, currentH - 1);
-
-                for (int c = 0; c < 4; ++c) {
+                const Core::u32 xStart = static_cast<Core::u32>(static_cast<Core::u64>(x) * currentW / nextW);
+                const Core::u32 xEnd = static_cast<Core::u32>(static_cast<Core::u64>(x + 1) * currentW / nextW);
+                const Core::u32 sampleCount = (xEnd - xStart) * (yEnd - yStart);
+                for (Core::u32 channel = 0; channel < 4; ++channel) {
                     Core::u32 sum = 0;
-                    sum += prevPixels[(srcY0 * currentW + srcX0) * 4 + c];
-                    sum += prevPixels[(srcY0 * currentW + srcX1) * 4 + c];
-                    sum += prevPixels[(srcY1 * currentW + srcX0) * 4 + c];
-                    sum += prevPixels[(srcY1 * currentW + srcX1) * 4 + c];
-                    nextPixels[(y * nextW + x) * 4 + c] = static_cast<Core::u8>(sum / 4);
+                    for (Core::u32 srcY = yStart; srcY < yEnd; ++srcY) {
+                        for (Core::u32 srcX = xStart; srcX < xEnd; ++srcX) {
+                            sum += previous[(static_cast<size_t>(srcY) * currentW + srcX) * 4 + channel];
+                        }
+                    }
+                    nextPixels[(static_cast<size_t>(y) * nextW + x) * 4 + channel] =
+                        static_cast<Core::u8>(sum / std::max(1u, sampleCount));
                 }
             }
         }
@@ -205,50 +266,53 @@ bool AssetCooker::CookTexture(
         currentH = nextH;
     }
 
+    if (mipData.size() > header.mips.size()) {
+        ENGINE_LOG_ERROR("AssetCooker: Generated mip count exceeds the binary format capacity.");
+        return false;
+    }
     header.mipCount = static_cast<Core::u32>(mipData.size());
 
-    // Calculate file offsets
     Core::u64 currentOffset = sizeof(TextureFileHeader);
     size_t totalBytes = sizeof(TextureFileHeader);
     currentW = width;
     currentH = height;
+    for (size_t mipIndex = 0; mipIndex < mipData.size(); ++mipIndex) {
+        auto& descriptor = header.mips[mipIndex];
+        descriptor.fileOffset = currentOffset;
+        descriptor.byteSize = mipData[mipIndex].size();
+        descriptor.width = currentW;
+        descriptor.height = currentH;
+        descriptor.rowPitch = currentW * 4;
 
-    for (size_t m = 0; m < mipData.size(); ++m) {
-        header.mips[m].fileOffset = currentOffset;
-        header.mips[m].byteSize = mipData[m].size();
-        header.mips[m].width = currentW;
-        header.mips[m].height = currentH;
-        header.mips[m].rowPitch = currentW * 4;
-
-        currentOffset += mipData[m].size();
-        totalBytes += mipData[m].size();
-
+        if (!AddSize(totalBytes, mipData[mipIndex].size()) ||
+            currentOffset > std::numeric_limits<Core::u64>::max() - mipData[mipIndex].size()) {
+            ENGINE_LOG_ERROR("AssetCooker: Texture serialization size overflow.");
+            return false;
+        }
+        currentOffset += mipData[mipIndex].size();
         currentW = std::max(1u, currentW / 2);
         currentH = std::max(1u, currentH / 2);
     }
 
     header.commonHeader.uncompressedSize = totalBytes;
-
-    // Serialize
     std::vector<Core::u8> fileBuffer(totalBytes);
-    std::memcpy(fileBuffer.data(), &header, sizeof(TextureFileHeader));
-
-    Core::u8* ptr = fileBuffer.data() + sizeof(TextureFileHeader);
+    std::memcpy(fileBuffer.data(), &header, sizeof(header));
+    Core::u8* cursor = fileBuffer.data() + sizeof(header);
     for (const auto& mip : mipData) {
-        std::memcpy(ptr, mip.data(), mip.size());
-        ptr += mip.size();
+        std::memcpy(cursor, mip.data(), mip.size());
+        cursor += mip.size();
     }
 
     if (!VirtualFileSystem::Get().WriteFile(outVirtualPath, fileBuffer.data(), fileBuffer.size())) {
-        ENGINE_LOG_ERROR("AssetCooker: Failed writing texture to '{}'", outVirtualPath);
+        ENGINE_LOG_ERROR("AssetCooker: Failed writing texture to '{}'.", outVirtualPath);
         return false;
     }
 
-    AssetMetadata meta{};
-    meta.guid = guid;
-    meta.cookedPath = outVirtualPath;
-    meta.assetType = "Texture";
-    AssetDatabase::Get().RegisterAsset(meta);
+    AssetMetadata metadata{};
+    metadata.guid = guid;
+    metadata.cookedPath = outVirtualPath;
+    metadata.assetType = "Texture";
+    AssetDatabase::Get().RegisterAsset(metadata);
 
     ENGINE_LOG_INFO("AssetCooker: Cooked texture '{}' ({}x{}, {} MIPs, {:.2f} KB)",
         outVirtualPath, width, height, header.mipCount, totalBytes / 1024.0f);
@@ -267,18 +331,18 @@ bool AssetCooker::CookMaterial(
     header.commonHeader.uncompressedSize = sizeof(MaterialFileHeader);
 
     if (!VirtualFileSystem::Get().WriteFile(outVirtualPath, &header, sizeof(MaterialFileHeader))) {
-        ENGINE_LOG_ERROR("AssetCooker: Failed writing material to '{}'", outVirtualPath);
+        ENGINE_LOG_ERROR("AssetCooker: Failed writing material to '{}'.", outVirtualPath);
         return false;
     }
 
-    AssetMetadata meta{};
-    meta.guid = guid;
-    meta.cookedPath = outVirtualPath;
-    meta.assetType = "Material";
-    if (materialData.albedoTextureGUID.IsValid()) meta.dependencies.push_back(materialData.albedoTextureGUID);
-    if (materialData.normalTextureGUID.IsValid()) meta.dependencies.push_back(materialData.normalTextureGUID);
-    if (materialData.metallicRoughnessTextureGUID.IsValid()) meta.dependencies.push_back(materialData.metallicRoughnessTextureGUID);
-    AssetDatabase::Get().RegisterAsset(meta);
+    AssetMetadata metadata{};
+    metadata.guid = guid;
+    metadata.cookedPath = outVirtualPath;
+    metadata.assetType = "Material";
+    if (materialData.albedoTextureGUID.IsValid()) metadata.dependencies.push_back(materialData.albedoTextureGUID);
+    if (materialData.normalTextureGUID.IsValid()) metadata.dependencies.push_back(materialData.normalTextureGUID);
+    if (materialData.metallicRoughnessTextureGUID.IsValid()) metadata.dependencies.push_back(materialData.metallicRoughnessTextureGUID);
+    AssetDatabase::Get().RegisterAsset(metadata);
 
     ENGINE_LOG_INFO("AssetCooker: Cooked material '{}'", outVirtualPath);
     return true;

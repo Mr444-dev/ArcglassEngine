@@ -5,6 +5,7 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 namespace Engine::Core {
 
@@ -71,10 +72,11 @@ public:
     void Initialize(u32 threadCount = 0);
     void Shutdown();
 
-    // Submit single job
-    void SubmitJob(JobFunction function, void* data = nullptr, JobCounter* counter = nullptr);
+    // Returns false if the scheduler is stopped or the function is null. Accepted jobs
+    // are drained by Shutdown; call Shutdown from an owning non-worker thread.
+    [[nodiscard]] bool SubmitJob(JobFunction function, void* data = nullptr, JobCounter* counter = nullptr);
 
-    // Parallel For split across threads
+    // Parallel For split across threads; runs synchronously if the scheduler is stopped.
     void ParallelFor(
         u32 totalCount,
         u32 batchSize,
@@ -86,7 +88,7 @@ public:
     // Wait on a counter; worker thread steals jobs while waiting
     void WaitForCounter(JobCounter* counter);
 
-    [[nodiscard]] u32 GetWorkerCount() const noexcept { return static_cast<u32>(m_workers.size()); }
+    [[nodiscard]] u32 GetWorkerCount() const noexcept;
     [[nodiscard]] bool IsRunning() const noexcept { return m_running.load(std::memory_order_acquire); }
 
 private:
@@ -95,10 +97,16 @@ private:
 
     void WorkerLoop(u32 workerIndex);
     bool ExecuteNextJob(u32 workerIndex);
+    [[nodiscard]] bool BeginQueueUse() noexcept;
+    void FinishQueueUse() noexcept;
 
     std::vector<std::thread> m_workers;
     std::vector<WorkStealingQueue> m_queues;
     std::atomic<bool> m_running{false};
+    mutable std::mutex m_lifecycleMutex;
+    std::condition_variable m_lifecycleChanged;
+    bool m_shuttingDown{false};
+    size_t m_activeQueueUsers{0};
 };
 
 } // namespace Engine::Core

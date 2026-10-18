@@ -14,6 +14,8 @@
 
 namespace Engine::Renderer {
 
+// Experimental scheduling prototype. The runtime intentionally does not execute this
+// graph until GPU resource ownership, aliasing, and buffer barriers are implemented.
 class RenderGraph;
 
 class RGPassBuilder {

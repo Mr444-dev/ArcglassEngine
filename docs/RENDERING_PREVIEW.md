@@ -29,7 +29,13 @@ Published work on scalable atmosphere rendering and real-time cloudscapes inform
 ```cmd
 cmake --preset windows-msvc-release
 cmake --build --preset windows-msvc-release --parallel
-ctest --test-dir build/arcglass-msvc-release -C RelWithDebInfo --output-on-failure
+ctest --test-dir build/arcglass-msvc-release -C RelWithDebInfo -LE gpu --output-on-failure
+```
+
+Run the hardware-dependent D3D12 smoke test separately on a supported adapter:
+
+```cmd
+ctest --test-dir build/arcglass-msvc-release -C RelWithDebInfo -L gpu --output-on-failure
 ```
 
 Build requirements are listed in the main [README](../README.md).

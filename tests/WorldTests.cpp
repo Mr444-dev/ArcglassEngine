@@ -56,8 +56,8 @@ void TestTransformHierarchyPropagation() {
     gT.position = {2.0f, 0.0f, 0.0f};
 
     // Build hierarchy: Parent -> Child -> Grandchild
-    scene.GetHierarchy().AttachChild(parent.GetID(), child.GetID(), scene.GetRegistry());
-    scene.GetHierarchy().AttachChild(child.GetID(), grandchild.GetID(), scene.GetRegistry());
+    ENGINE_VERIFY(scene.GetHierarchy().AttachChild(parent.GetID(), child.GetID(), scene.GetRegistry()), "Failed attaching child to parent");
+    ENGINE_VERIFY(scene.GetHierarchy().AttachChild(child.GetID(), grandchild.GetID(), scene.GetRegistry()), "Failed attaching grandchild to child");
 
     // Update scene
     scene.Update(0.016f);
@@ -73,6 +73,55 @@ void TestTransformHierarchyPropagation() {
 
     ENGINE_LOG_INFO("Transform hierarchy propagation verified (Parent: 10, Child: {}, Grandchild: {}).",
         childWorldX, grandWorldX);
+}
+
+void TestHierarchyCycleRejectionAndSubtreeDestruction() {
+    using namespace Engine::World;
+    using namespace Engine::Core;
+
+    Scene scene;
+    Entity root = scene.CreateEntity("Root");
+    Entity child = scene.CreateEntity("Child");
+    Entity grandchild = scene.CreateEntity("Grandchild");
+
+    ENGINE_VERIFY(scene.GetHierarchy().AttachChild(root.GetID(), child.GetID(), scene.GetRegistry()), "Failed attaching child");
+    ENGINE_VERIFY(scene.GetHierarchy().AttachChild(child.GetID(), grandchild.GetID(), scene.GetRegistry()), "Failed attaching grandchild");
+    ENGINE_ASSERT(!scene.GetHierarchy().AttachChild(grandchild.GetID(), root.GetID(), scene.GetRegistry()), "Hierarchy accepted a parent cycle");
+
+    scene.Update(0.016f);
+    ENGINE_ASSERT(scene.GetHierarchy().GetEntityCount() == 3, "Cycle rejection corrupted hierarchy traversal");
+
+    const EntityID childId = child.GetID();
+    const EntityID grandchildId = grandchild.GetID();
+    scene.DestroyEntity(childId);
+    ENGINE_ASSERT(scene.GetEntityCount() == 1, "Destroying a parent must remove its complete subtree");
+    ENGINE_ASSERT(!scene.GetRegistry().Has<TagComponent>(childId), "Destroyed child retained components");
+    ENGINE_ASSERT(!scene.GetRegistry().Has<TagComponent>(grandchildId), "Destroyed grandchild retained components");
+    ENGINE_ASSERT(scene.GetRegistry().Has<TagComponent>(root.GetID()), "Destroying a child subtree removed its parent");
+}
+
+void TestWorldBoundsUseFullTransform() {
+    using namespace Engine::World;
+    using namespace Engine::Core;
+
+    Scene scene;
+    Entity parent = scene.CreateEntity("RotatedParent");
+    Entity child = scene.CreateEntity("ScaledChild");
+    parent.GetComponent<TransformComponent>().position = {10.0f, 0.0f, 0.0f};
+    auto& transform = child.GetComponent<TransformComponent>();
+    transform.position = {2.0f, 0.0f, 0.0f};
+    transform.rotation.z = 1.57079632679f;
+    transform.scale = {2.0f, 1.0f, 1.0f};
+    auto& mesh = child.AddComponent<MeshComponent>();
+    mesh.localAABB = {{0.0f, 0.0f, 0.0f}, {1.0f, 2.0f, 1.0f}};
+    ENGINE_VERIFY(scene.GetHierarchy().AttachChild(parent.GetID(), child.GetID(), scene.GetRegistry()), "Failed attaching bounds test child");
+
+    scene.Update(0.016f);
+    const auto& bounds = scene.GetBVH().GetRootBounds();
+    ENGINE_ASSERT(std::abs(bounds.min.x - 10.0f) < 1e-3f && std::abs(bounds.max.x - 12.0f) < 1e-3f,
+        "World AABB ignored parent translation, rotation, or scale");
+    ENGINE_ASSERT(std::abs(bounds.min.y) < 1e-3f && std::abs(bounds.max.y - 2.0f) < 1e-3f,
+        "World AABB has incorrect rotated extents");
 }
 
 void Test50000EntitiesStressTest() {
@@ -94,7 +143,7 @@ void Test50000EntitiesStressTest() {
         Entity e = scene.CreateEntity("Child_" + std::to_string(i));
         e.GetComponent<TransformComponent>().position = {0.1f, 0.0f, 0.0f};
 
-        scene.GetHierarchy().AttachChild(currentParent, e.GetID(), scene.GetRegistry());
+        ENGINE_VERIFY(scene.GetHierarchy().AttachChild(currentParent, e.GetID(), scene.GetRegistry()), "Stress hierarchy attachment failed");
 
         // Branch every 10 levels
         if (i % 10 == 0) {
@@ -163,6 +212,8 @@ void TestSpatialBVHFrustumCulling() {
 void RunWorldUnitTests() {
     TestEntityAndComponentLifecycle();
     TestTransformHierarchyPropagation();
+    TestHierarchyCycleRejectionAndSubtreeDestruction();
+    TestWorldBoundsUseFullTransform();
     Test50000EntitiesStressTest();
     TestSpatialBVHFrustumCulling();
 }
