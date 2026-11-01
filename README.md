@@ -196,4 +196,4 @@ This repository provides concrete examples of:
 
 ## Author
 
-**Michał Rusinek** · [GitHub](https://github.com/Mr444-dev) · [Portfolio](https://mr444-dev.github.io/)
+**Michał Rusinek** · [GitHub](https://github.com/Mr444-dev) · [Portfolio](https://portfolio.michaelrusinek.workers.dev/)
