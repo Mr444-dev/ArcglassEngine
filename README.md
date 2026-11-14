@@ -14,11 +14,13 @@
 
 <p align="center"><strong>C++20 · CMake · MSVC · Win32 · Direct3D 12 · HLSL · CTest</strong></p>
 
+![1920×1080 Arcglass Engine editor capture from the local Windows build; the editor frame indicator shown in the title bar is not a performance benchmark.](docs/screenshots/arcglass-d3d12-showcase.png)
+
 Arcglass Engine is a Windows game-engine prototype written in C++20. It contains a Direct3D 12 rendering interface, engine subsystems, a small custom editor, a standalone runtime, and a native test executable.
 
 This repository is a learning and portfolio project, not a production-ready engine. The editor and runtime start on the verified Windows development machine. Many engine modules have unit-level checks, but they are not all connected into a complete end-to-end game pipeline.
 
-<p align="center"><strong>Demo capture:</strong> No recorded clip is committed yet. The <a href="docs/TECH_DEMO_GUIDE.md">45-second editor walkthrough</a> lists a repeatable capture sequence.</p>
+<p align="center"><strong>Demo capture:</strong> This is an actual local editor capture. No recorded clip is committed yet; the <a href="docs/TECH_DEMO_GUIDE.md">45-second editor walkthrough</a> lists a repeatable recording sequence. The frame indicator visible in the window title is editor UI telemetry, not an engine benchmark.</p>
 
 <p align="center"><a href="#why-this-project-exists">Overview</a> &nbsp;·&nbsp; <a href="#architecture">Architecture</a> &nbsp;·&nbsp; <a href="#build-requirements">Build</a> &nbsp;·&nbsp; <a href="#build-and-test">Tests</a> &nbsp;·&nbsp; <a href="docs/TECH_DEMO_GUIDE.md">Demo guide</a> &nbsp;·&nbsp; <a href="#portfolio-status">Status</a></p>
 
@@ -37,6 +39,13 @@ Checks run from the renamed `ArcglassEngine` checkout on 2026-10-06:
 - The editor includes a filesystem-backed `Assets` panel with folder shortcuts, paging, refresh, and `Add Files` copy into the project asset tree. The UI and its shader compile; live interaction was not rechecked in this build.
 - The editor/runtime executables and their shader outputs were generated in the fresh build directory. The icons are embedded in the executables; there are no runtime icon-file dependencies.
 - Earlier local graphics checks used an NVIDIA GeForce GTX 1660 SUPER with about 6 GB dedicated VRAM. Other adapters have not been tested.
+
+### Portfolio verification, 2026-11-14
+
+- Reconfigured the Windows x64 MSVC Release preset and built `EngineEditor` successfully.
+- The editor window started on an NVIDIA GeForce GTX 1660 SUPER; the 1920×1080 image above is a scaled layout containing the actual 1440×900 editor capture.
+- CTest passed its registered target (`Engine_UnitTests`, 1/1). This is the current registered target count, not a claim of complete engine coverage.
+- The editor title displays its own frame indicator. No frame-time or throughput benchmark was run for this update.
 
 The checkout does not track executables. Fresh binaries are generated under the ignored `build/arcglass-msvc-release/bin/` directory. Historical binaries at the repository root are stale local artifacts and must not be published. CI rebuilds from source; no binary release is claimed.
 ## Engineering Highlights
