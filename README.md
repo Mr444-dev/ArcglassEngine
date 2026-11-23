@@ -7,7 +7,7 @@
 <p align="center"><strong>C++20 and Direct3D 12 engine prototype with a custom Windows editor</strong></p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT%20(source%20only)-blue.svg" alt="MIT license for original source only"></a>
+  <img src="https://img.shields.io/badge/Source-All%20rights%20reserved-red.svg" alt="All rights reserved">
   <a href="https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml"><img src="https://github.com/Mr444-dev/ArcglassEngine/actions/workflows/ci.yml/badge.svg" alt="Windows CI"></a>
   <img src="https://img.shields.io/badge/Status-prototype-orange.svg" alt="Prototype status">
 </p>
@@ -69,7 +69,7 @@ The checkout does not track executables. Fresh binaries are generated under the 
 - Vulkan headers and Linux/deployment files are exploratory scaffolding; only the Windows Direct3D 12 build and test path has been verified here.
 - Performance values in historical planning documents have not been reproduced as benchmarks and are not presented as current results.
 - One CTest test is registered; it invokes a larger executable containing multiple internal checks. This is not complete subsystem coverage.
-- Original source code is covered by the repository's MIT license; third-party code, assets, fonts, and dependencies keep their own terms. See [LICENSE](LICENSE).
+- Original source code is not offered under an open-source license; all rights are reserved. Third-party code, assets, fonts, and dependencies keep their own terms. See [LICENSE](LICENSE).
 
 ## My Contribution
 
@@ -191,9 +191,9 @@ Subsystem checks are collected in the native test executable and CTest target. T
 
 The strongest verified material is the C++20 module structure, Direct3D 12 device/swap-chain path, engine-side data structures, and repeatable Windows CI. Present renderer features as experiments or work in progress until they are rendered by the runtime and captured in a reproducible demo.
 
-## License
+## Copyright and reuse
 
-Original source code authored for this repository is distributed under the MIT License. Third-party code, assets, fonts, and dependencies retain their own licenses; see [LICENSE](LICENSE) and the bundled Inter font license.
+Original source code authored for this repository is not offered under an open-source license; all rights are reserved. Third-party code, assets, fonts, and dependencies retain their own licenses; see [LICENSE](LICENSE) and the bundled Inter font license.
 
 ## What This Project Demonstrates
 
